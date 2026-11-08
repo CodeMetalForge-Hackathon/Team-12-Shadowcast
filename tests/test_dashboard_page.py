@@ -227,6 +227,9 @@ def draw_page_with_stub(tmp_path, payload):
     return result["calls"]
 
 
+PUCK_R = 12   # css px: the page draws every node as a round puck of this radius (UI overhaul: was a 14 px square)
+
+
 @pytest.mark.slow
 @needs_node
 def test_page_draws_rx3_above_the_room_outline_and_heat_exactly_over_the_room_rectangle(tmp_path):
@@ -235,10 +238,10 @@ def test_page_draws_rx3_above_the_room_outline_and_heat_exactly_over_the_room_re
     heat = next(c for c in calls if c[0] == "drawImage")
     assert heat[2:] == outline[1:]                                    # the heat covers the room rectangle only
     room_top = outline[2]
-    # rx3 is 14 px square with its centre above the top wall: inside the canvas, and not on the room
-    markers = [c for c in calls if c[0] == "strokeRect" and c[3] == 14 and c[4] == 14]
-    above = [c for c in markers if c[2] + 7 < room_top and c[2] >= 0]
-    assert len(above) == 1
+    # one puck per node; rx3's centre is above the top wall, and the whole puck is inside the canvas
+    pucks = [c for c in calls if c[0] == "arc" and c[3] == PUCK_R]
+    above = [c for c in pucks if c[2] < room_top and c[2] - PUCK_R >= 0]
+    assert len(pucks) == 5 and len(above) == 1
     assert any(c[0] == "fillText" and c[1] == "outside room" for c in calls)
 
 
@@ -480,3 +483,297 @@ def test_page_caption_says_which_estimator_drew_the_map_and_names_none_for_an_ol
     assert captions == [f"Rough motion-likelihood estimate from {n} links (back-projection).",
                         f"Rough motion-likelihood estimate from {n} links (RTI).",
                         f"Rough motion-likelihood estimate from {n} links."]
+
+
+# ---------------------------------------------------------------- the operations view (UI overhaul)
+
+COVERAGE_BEGIN = "// ---- coverage: pure (tested with node) begin"
+COVERAGE_END = "// ---- coverage: pure (tested with node) end"
+HEALTH_BEGIN = "// ---- health: pure (tested with node) begin"
+HEALTH_END = "// ---- health: pure (tested with node) end"
+ROOM_STATE_BEGIN = "// ---- room state: pure (tested with node) begin"
+ROOM_STATE_END = "// ---- room state: pure (tested with node) end"
+L_NOTCHED = [[0, 0], [2.77, 0], [2.77, 0.92], [1.385, 0.92], [1.385, 1.84], [0, 1.84]]   # 126 cell centres cut
+
+
+def run_block(tmp_path, begin, end, tail, data):
+    """Run one of the page's marked pure blocks under node, then ``tail``, which reads ``input`` (``data``, sent as
+    JSON on stdin) and prints JSON; return what it printed."""
+    html = PAGE.read_text(encoding="utf-8")
+    script = tmp_path / "block_harness.js"
+    script.write_text(html[html.index(begin):html.index(end)] +
+                      '\nvar input = JSON.parse(require("fs").readFileSync(0, "utf8"));\n' + tail, encoding="utf-8")
+    proc = subprocess.run(["node", str(script)], input=json.dumps(data), capture_output=True, text=True, timeout=30)
+    assert proc.returncode == 0, proc.stderr
+    return json.loads(proc.stdout)
+
+
+def test_page_is_an_operations_view_with_a_room_pill_map_layers_a_demo_view_and_a_controls_drawer():
+    html = PAGE.read_text(encoding="utf-8")
+    for needle in ('id="room-pill"', 'id="room-state"', 'id="last-motion"', 'id="agree"', 'id="estimator"',
+                   'id="receivers"', 'id="demo"', 'id="drawer-toggle"', 'id="links"', 'id="pucks"',
+                   'id="layer-heat"', 'id="layer-links"', 'id="layer-coverage"', 'id="sort-attention"',
+                   COVERAGE_BEGIN, HEALTH_BEGIN, ROOM_STATE_BEGIN):
+        assert needle in html, needle
+    for layer in ("layer-heat", "layer-links"):                                  # on from the start
+        assert re.search(rf'<input[^>]*id="{layer}"[^>]*checked', html), layer
+    assert not re.search(r'<input[^>]*id="layer-coverage"[^>]*checked', html)    # for placing pucks: off at first
+    assert re.search(r'<section[^>]*class="drawer"[^>]*id="controls"', html)      # the controls are in a drawer
+    # dark first; light from the system or an explicit data-theme on <html>; numbers line up; reduced motion
+    assert ':root:not([data-theme="dark"])' in html and ':root[data-theme="light"]' in html
+    assert "prefers-color-scheme: light" in html and "prefers-reduced-motion: reduce" in html
+    assert "font-variant-numeric: tabular-nums" in html
+
+
+COVERAGE_TAIL = """
+var outline = input.footprint ? input.footprint.map(function (p) { return { x: p[0], y: p[1] }; }) : null;
+var paths = coveragePaths(input.nodes, input.links);
+var counts = coverageCounts(input.room, outline, paths, 28, 18);
+var summary = coverageSummary(counts, COVERAGE_MIN_LINKS);
+console.log(JSON.stringify({ paths: paths.length, counts: counts, summary: summary }));
+"""
+
+
+@pytest.mark.slow
+@needs_node
+def test_coverage_layer_counts_the_links_whose_band_crosses_each_cell_as_the_layout_planner_does(tmp_path):
+    rig = DashboardState(ROOM).snapshot(now=NOW)                    # the frozen four-link rig
+    data = {"room": rig["room"], "nodes": rig["nodes"], "links": rig["links"]}
+
+    def coverage(**changes):
+        return run_block(tmp_path, COVERAGE_BEGIN, COVERAGE_END, COVERAGE_TAIL, {**data, **changes})
+
+    four = coverage()
+    assert four["paths"] == 4
+    assert four["counts"][8 * 28 + 13] == 2       # mid-room: only the two diagonals pass
+    assert four["counts"][8 * 28 + 3] == 3        # by the left wall, half way down: its link and both diagonals
+    assert four["summary"]["blind"] > four["summary"]["cells"] / 2   # four links leave most of the room blind
+    notched = coverage(footprint=L_NOTCHED)       # the notch of an L-shaped room is outside it, not blind
+    assert sum(c is None for c in notched["counts"]) == 126 and notched["summary"]["cells"] == 28 * 18 - 126
+    # as in scripts/plan_layout.py: two links between the same two pucks are one path, a link of weight 0 is left out
+    assert coverage(links=rig["links"] + rig["links"][:1])["paths"] == 4
+    weightless = copy.deepcopy(rig["links"])
+    weightless[0]["weight"] = 0
+    assert coverage(links=weightless)["paths"] == 3
+    five = DashboardState(load_room(FIVE)).snapshot(now=NOW)        # a third receiver on the top wall: six links
+    six = coverage(room=five["room"], nodes=five["nodes"], links=five["links"])
+    assert six["paths"] == 6 and six["summary"]["blind"] < four["summary"]["blind"]
+
+
+HEALTH_TAIL = """
+console.log(JSON.stringify({
+  links: input.links.map(function (row) { return [linkHealth(row), linkIssues(row)]; }),
+  pucks: input.pucks.map(function (q) { return puckHealth(q[0], input.links, q[1]); }),
+  attention: sortedLinkIds(input.links, "attention"),
+  names: sortedLinkIds(input.links, "name")
+}));
+"""
+
+
+@pytest.mark.slow
+@needs_node
+def test_link_and_puck_health_say_what_to_fix_and_the_links_sort_by_attention(tmp_path):
+    ok = {"state": "EMPTY", "pkt_rate": 39.0, "rssi": -50, "seq_loss": 0.0, "clip_pct": 0.0}
+    links = [
+        {**ok, "id": "rx1<-00", "receiver": "rx1", "sender": "tx0"},
+        {**ok, "id": "rx1<-01", "receiver": "rx1", "sender": "tx1", "rssi": -75, "seq_loss": 0.2},
+        {**ok, "id": "rx2<-00", "receiver": "rx2", "sender": "tx0", "state": "MOTION", "clip_pct": 0.08},
+        {**ok, "id": "rx2<-01", "receiver": "rx2", "sender": "tx1", "state": "NO_SIGNAL", "pkt_rate": 0.0},
+        {"id": "rx3<-00", "receiver": "rx3", "sender": "tx0", "state": "WARMUP", "pkt_rate": 5.0},   # an old log
+        {"id": "rx4<-02", "receiver": "rx4", "sender": "tx2", "state": "NO_SIGNAL", "pkt_rate": 0.0},
+    ]
+    pucks = [["tx0", None], ["tx1", None], ["rx3", "failed"], ["rx4", "connected"], ["rx9", None]]
+    out = run_block(tmp_path, HEALTH_BEGIN, HEALTH_END, HEALTH_TAIL, {"links": links, "pucks": pucks})
+    assert out["links"] == [["good", []], ["warn", ["packet loss", "weak signal"]], ["warn", ["clipping"]],
+                            ["fail", ["no signal"]], ["warn", ["few packets"]], ["fail", ["no signal"]]]
+    assert out["pucks"] == [{"level": "warn", "healthy": 1, "total": 3},
+                            {"level": "warn", "healthy": 0, "total": 2},
+                            {"level": "fail", "healthy": 0, "total": 1},      # its serial port failed
+                            {"level": "fail", "healthy": 0, "total": 1},      # none of its links is heard
+                            {"level": "unknown", "healthy": 0, "total": 0}]
+    # MOTION first, then failing links, then links that need a look, then the rest; ties by name
+    assert out["attention"] == ["rx2<-00", "rx2<-01", "rx4<-02", "rx1<-01", "rx3<-00", "rx1<-00"]
+    assert out["names"] == ["rx1<-00", "rx1<-01", "rx2<-00", "rx2<-01", "rx3<-00", "rx4<-02"]
+
+
+ROOM_STATE_TAIL = """
+console.log(JSON.stringify(input.map(function (p) { var v = roomView(p); return [v.label, v.detail]; })));
+"""
+
+
+@pytest.mark.slow
+@needs_node
+def test_room_pill_reads_the_room_decision_and_falls_back_to_the_link_states_for_an_old_log(tmp_path):
+    def frame(states, room=None):
+        status = {"time_s": NOW} if room is None else {"time_s": NOW, "room": room}
+        return {"links": [{"id": f"l{i}", "state": s} for i, s in enumerate(states)], "status": status}
+
+    agree = {"state": "MOTION", "elevated": ["l0", "l1"], "active": 4, "required": 2, "reason": "agree",
+             "room_support": {"x": 1.4, "y": 0.9, "links": ["l0", "l1"], "radius_m": 1.0}, "glitch_nodes": []}
+    warmup = {"state": "WARMUP", "elevated": [], "reason": "warmup"}
+    cases = [
+        frame(["MOTION", "MOTION", "EMPTY", "EMPTY"], agree),
+        frame(["MOTION", "EMPTY", "EMPTY", "NO_SIGNAL"], {**agree, "elevated": ["l0"], "reason": "strong",
+                                                           "room_support": None}),
+        frame(["MOTION", "EMPTY", "EMPTY", "EMPTY"], {"state": "EMPTY", "elevated": ["l0"], "required": 2,
+                                                      "reason": "too_few"}),
+        frame(["EMPTY"] * 4, {"state": "EMPTY", "elevated": [], "required": 2, "reason": "quiet"}),
+        frame(["WARMUP", "WARMUP", "NO_SIGNAL", "NO_SIGNAL"], warmup),
+        frame(["UNCALIBRATED"] * 4, warmup),
+        frame(["NO_SIGNAL"] * 4, warmup),
+        frame(["MOTION", "EMPTY"]),                  # logs written before the room decision have no status.room
+        frame(["EMPTY", "EMPTY"]),
+        frame([]),
+    ]
+    assert run_block(tmp_path, ROOM_STATE_BEGIN, ROOM_STATE_END, ROOM_STATE_TAIL, cases) == [
+        ["MOTION", "2 links agree near (1.40, 0.90) m"],
+        ["MOTION", "one link strongly raised; 3 of 4 links heard"],
+        ["CLEAR", "1 raised, 2 needed"],
+        ["CLEAR", "no link raised"],
+        ["LEARNING", "links are learning their quiet level; 2 of 4 links heard"],
+        ["UNCALIBRATED", "no link has a threshold: calibrate on an empty room"],
+        ["NO DATA", "no packets from any link"],
+        ["MOTION", "1 link in MOTION (no room decision in this log)"],
+        ["CLEAR", "no link in MOTION (no room decision in this log)"],
+        ["NO DATA", "no links in this frame"],
+    ]
+
+
+@pytest.mark.slow
+@needs_node
+def test_page_shows_the_room_state_with_its_reason_the_agreement_point_and_what_needs_fixing(tmp_path):
+    base = DashboardState(load_room(FIVE)).snapshot(now=NOW)          # nothing heard yet
+    motion = copy.deepcopy(base)
+    for row in motion["links"]:
+        row.update(state="EMPTY", pkt_rate=39.0, rssi=-50, age_s=0.0, seq_loss=0.0, clip_pct=0.0)
+    motion["links"][0].update(state="MOTION", rssi=-78)
+    agreeing = [motion["links"][0]["id"], motion["links"][3]["id"]]
+    motion["status"]["room"].update(state="MOTION", elevated=agreeing, active=6, required=2, reason="agree",
+                                    room_support={"x": 1.4, "y": 0.9, "links": agreeing, "radius_m": 1.0})
+    result = render_payloads_with_stub(tmp_path, [base, motion])
+    assert result["errors"] == []
+    texts, drawn = result["texts"], [c[1] for c in result["calls"] if c[0] == "fillText"]
+    assert "NO DATA" in texts and "no packets from any link" in texts
+    assert "no packets" in drawn                                        # a puck none of whose links is heard
+    assert "2 links agree near (1.40, 0.90) m" in texts
+    assert "links agree here" in drawn                                  # the point the agreeing links pass near
+    assert "Check: weak signal" in texts                                # the -78 dBm link says what to fix
+
+
+INTERACT_STUB = r"""
+const fs = require("fs");
+const input = JSON.parse(fs.readFileSync(0, "utf8"));
+const script = input.html.split("<script>")[1].split("</script>")[0];
+const mapLog = [];
+function recorder(log) {
+  return new Proxy({}, {
+    get(t, k) {
+      if (k in t) return t[k];
+      if (k === "measureText") return (s) => ({ width: String(s).length * 7 });
+      if (k === "createImageData") return (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) });
+      return (...args) => {
+        if (log) log.push([k, ...args.map((a) => (typeof a === "object" && a !== null ? "obj" : a))]);
+      };
+    },
+    set(t, k, v) { t[k] = v; return true; },
+  });
+}
+const mapCtx = recorder(mapLog), heatCtx = recorder(null);
+const created = [];
+function element(id, tag) {
+  const listeners = {};
+  const t = { clientWidth: 600, clientHeight: 40, width: 0, height: 0, firstChild: null, style: {}, hidden: false,
+    className: "", textContent: "", attrs: {},
+    addEventListener(type, fn) { (listeners[type] = listeners[type] || []).push(fn); },
+    fire(type, ev) {
+      (listeners[type] || []).forEach((fn) => fn(Object.assign({ target: { tagName: "BUTTON" } }, ev)));
+    },
+    setAttribute(k, v) { t.attrs[k] = String(v); },
+    getAttribute(k) { return k in t.attrs ? t.attrs[k] : null; },
+    getBoundingClientRect() { return { left: 0, top: 0 }; },
+    classList: { toggle(c, on) {
+      const kept = t.className.split(/\s+/).filter((x) => x && x !== c);
+      t.className = (on ? kept.concat([c]) : kept).join(" ");
+    } } };
+  if (tag === "canvas" || id === "map") t.getContext = () => (id === "map" ? mapCtx : heatCtx);
+  return new Proxy(t, {
+    get(obj, k) { return k in obj ? obj[k] : () => undefined; },
+    set(obj, k, v) { obj[k] = v; return true; },
+  });
+}
+const elements = {};
+const document = {
+  getElementById(id) { return (elements[id] = elements[id] || element(id, "div")); },
+  createElement(tag) { const e = element("tmp", tag); created.push(e); return e; },
+  createTextNode(text) { return { text }; },
+  activeElement: null,
+  documentElement: element("html", "html"),
+};
+const keydown = [];
+const window = { devicePixelRatio: 1, addEventListener(type, fn) { if (type === "keydown") keydown.push(fn); },
+  requestAnimationFrame() {} };
+const noop = () => 0;
+let stream = null;
+function FakeEventSource() { this.close = noop; stream = this; }
+const errors = [], out = {};
+(async () => {
+  try {
+    new Function("window", "document", "fetch", "EventSource", "setTimeout", "clearTimeout", script)(
+      window, document, () => Promise.reject(new Error("no server")), FakeEventSource, noop, noop);
+    for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
+    const send = (p) => stream.onmessage({ data: JSON.stringify(p) });
+    const selected = (prefix) => created.some((e) => e.className.startsWith(prefix) && / sel$/.test(e.className));
+    send(input.payload);
+    created.find((e) => e.className === "lrow-head").fire("click", {});        // a link row: details and selection
+    out.rowSelected = selected("lrow ");
+    out.rowOpen = created.some((e) => e.className === "lrow-details" && e.hidden === false);
+    const puck = mapLog.filter((c) => c[0] === "arc" && c[3] === 12).pop();   // a puck on the map: its row
+    elements.map.fire("click", { clientX: puck[1], clientY: puck[2] });
+    out.puckSelected = selected("prow ");
+    mapLog.length = 0;
+    elements["layer-coverage"].checked = true;
+    elements["layer-coverage"].fire("change", {});
+    out.images = mapLog.filter((c) => c[0] === "drawImage").length;
+    mapLog.length = 0;
+    elements.demo.fire("click", {});
+    out.demo = elements.app.className.includes("demo");
+    out.demoPucks = mapLog.filter((c) => c[0] === "arc" && c[3] === 15).length;
+    elements.demo.fire("click", {});
+    elements["drawer-toggle"].fire("click", {});
+    out.drawerOpened = elements.controls.className.includes("open");
+    keydown.forEach((fn) => fn({ key: "Escape", target: { tagName: "BODY" } }));
+    out.drawerClosed = !elements.controls.className.includes("open");
+    elements.pause.fire("click", {});
+    mapLog.length = 0;
+    send(input.payload);
+    out.pausedDraws = mapLog.length;
+    out.pausedFlag = elements["paused-flag"].textContent;
+    elements.pause.fire("click", {});
+    out.resumed = mapLog.length > 0;
+    elements.theme.fire("click", {});
+    out.theme = document.documentElement.getAttribute("data-theme");
+  } catch (err) { errors.push(String((err && err.stack) || err)); }
+  console.log(JSON.stringify({ out, errors }));
+})();
+"""
+
+
+@pytest.mark.slow
+@needs_node
+def test_map_and_side_panel_select_together_and_layers_demo_drawer_pause_and_theme_respond(tmp_path):
+    script = tmp_path / "interact_stub.js"
+    script.write_text(INTERACT_STUB, encoding="utf-8")
+    payload = DashboardState(load_room(FIVE)).snapshot(now=NOW)
+    proc = subprocess.run(["node", str(script)], input=json.dumps({"html": PAGE.read_text(encoding="utf-8"),
+                                                                   "payload": payload}),
+                          capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, proc.stderr
+    result = json.loads(proc.stdout)
+    assert result["errors"] == []
+    out = result["out"]
+    assert out["rowSelected"] and out["rowOpen"] and out["puckSelected"]
+    assert out["images"] == 2                                  # the coverage hatching over the heat
+    assert out["demo"] and out["demoPucks"] == 5               # the demo view draws larger pucks
+    assert out["drawerOpened"] and out["drawerClosed"]
+    assert out["pausedDraws"] == 0 and out["pausedFlag"] == "PAUSED, 1 newer" and out["resumed"]
+    assert out["theme"] == "light"

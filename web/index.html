@@ -3,265 +3,740 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
 <title>CSI room map</title>
 <style>
+  /* Theme: dark first (control rooms are dim). The light variant follows the system (prefers-color-scheme) unless
+     <html data-theme="dark|light"> says otherwise; the theme button sets that attribute. Detection states (--s-*),
+     link and puck health (--h-*) and the accent are separate colour sets. The map canvas reads its colours from
+     these properties too, so it follows the theme. Nothing is loaded from the network: system fonts only. */
   :root {
     color-scheme: dark;
-    --bg: #0b0f14;
-    --panel: #131a22;
-    --panel-2: #1a232d;
-    --line: #2a3644;
-    --text: #e8edf3;
-    --muted: #9aa7b4;
-    --empty: #3fb950;
-    --motion: #f85149;
-    --nosig: #8b949e;
-    --uncal: #e3a008;
-    --warm: #7d9ab5;
-    --sender: #58a6ff;
-    --track: #4de8ff;
+    --theme: dark;
+    --bg: #080c11;
+    --surface: #0f151c;
+    --surface-2: #141c25;
+    --surface-3: #1b2531;
+    --line: #222e3b;
+    --line-2: #314153;
+    --text: #e6edf3;
+    --text-2: #b7c2cd;
+    --muted: #8796a6;
+    --accent: #6ea8ff;
+    --accent-soft: rgba(110, 168, 255, 0.16);
+    --on-accent: #06101d;
+    --focus: #9cc4ff;
+    --s-motion: #ff5a4f;
+    --s-empty: #3fb950;
+    --s-warmup: #7f9bb8;
+    --s-uncal: #e3a008;
+    --s-nosig: #8b949e;
+    --on-state: #0b0f14;
+    --tint-empty: rgba(63, 185, 80, 0.14);
+    --tint-warmup: rgba(127, 155, 184, 0.16);
+    --h-good: #3fb950;
+    --h-warn: #e3a008;
+    --h-fail: #f85149;
+    --h-unknown: #6e7b88;
+    --warn-ink: #ffcf5c;
+    --warn-bg: rgba(227, 160, 8, 0.14);
+    --err-ink: #ffaba3;
+    --err-bg: rgba(248, 81, 73, 0.14);
+    --map-floor: #05080c;
+    --map-grid: rgba(150, 165, 180, 0.13);
+    --map-wall: #8b98a5;
+    --map-outline: #d0d8e0;
+    --map-tick: #8d9aa7;
+    --map-label: rgba(5, 8, 12, 0.86);
+    --map-outside: rgba(139, 148, 158, 0.18);
+    --puck: #101820;
+    --puck-edge: #3d4d60;
+    --rx: #e6edf3;
+    --tx: #58a6ff;
+    --track: #3ee6ff;
+    --track-fill: rgba(62, 230, 255, 0.14);
+    --lost: #e6edf3;
+    --busy: #f0b429;
+    --support: #ff9e8f;
+    --blind: #a5b4ff;
+    --heat-ramp: linear-gradient(90deg, rgba(0, 0, 4, 0) 0%, rgb(87, 16, 110) 25%, rgb(188, 55, 84) 50%,
+      rgb(249, 142, 9) 75%, rgb(252, 255, 164) 100%);
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    --radius: 12px;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      color-scheme: light;
+      --theme: light;
+      --bg: #eef1f5;
+      --surface: #ffffff;
+      --surface-2: #f6f8fa;
+      --surface-3: #e7ecf1;
+      --line: #d6dde5;
+      --line-2: #bfc9d4;
+      --text: #111922;
+      --text-2: #33414f;
+      --muted: #5b6979;
+      --accent: #2457c5;
+      --accent-soft: rgba(36, 87, 197, 0.12);
+      --on-accent: #ffffff;
+      --focus: #2457c5;
+      --s-motion: #d1242f;
+      --s-empty: #1a7f37;
+      --s-warmup: #56718e;
+      --s-uncal: #9a6700;
+      --s-nosig: #6e7781;
+      --on-state: #ffffff;
+      --tint-empty: rgba(26, 127, 55, 0.1);
+      --tint-warmup: rgba(86, 113, 142, 0.12);
+      --h-good: #1a7f37;
+      --h-warn: #b07800;
+      --h-fail: #cf222e;
+      --h-unknown: #8c959f;
+      --warn-ink: #7a5200;
+      --warn-bg: rgba(176, 120, 0, 0.12);
+      --err-ink: #a40e26;
+      --err-bg: rgba(207, 34, 46, 0.09);
+      --map-floor: #f3f5f8;
+      --map-grid: rgba(50, 70, 90, 0.12);
+      --map-wall: #6e7b88;
+      --map-outline: #2b3846;
+      --map-tick: #5b6979;
+      --map-label: rgba(255, 255, 255, 0.92);
+      --map-outside: rgba(110, 120, 130, 0.16);
+      --puck: #ffffff;
+      --puck-edge: #8995a2;
+      --rx: #1d2833;
+      --tx: #1f6feb;
+      --track: #008aa8;
+      --track-fill: rgba(0, 138, 168, 0.14);
+      --lost: #1d2833;
+      --busy: #b06a00;
+      --support: #c4321f;
+      --blind: #3346a3;
+      --heat-ramp: linear-gradient(90deg, rgba(255, 237, 160, 0) 0%, rgb(254, 178, 76) 25%, rgb(240, 59, 32) 50%,
+        rgb(189, 0, 38) 75%, rgb(110, 0, 30) 100%);
+      --shadow: 0 1px 2px rgba(16, 24, 32, 0.06), 0 8px 20px rgba(16, 24, 32, 0.06);
+    }
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --theme: light;
+    --bg: #eef1f5;
+    --surface: #ffffff;
+    --surface-2: #f6f8fa;
+    --surface-3: #e7ecf1;
+    --line: #d6dde5;
+    --line-2: #bfc9d4;
+    --text: #111922;
+    --text-2: #33414f;
+    --muted: #5b6979;
+    --accent: #2457c5;
+    --accent-soft: rgba(36, 87, 197, 0.12);
+    --on-accent: #ffffff;
+    --focus: #2457c5;
+    --s-motion: #d1242f;
+    --s-empty: #1a7f37;
+    --s-warmup: #56718e;
+    --s-uncal: #9a6700;
+    --s-nosig: #6e7781;
+    --on-state: #ffffff;
+    --tint-empty: rgba(26, 127, 55, 0.1);
+    --tint-warmup: rgba(86, 113, 142, 0.12);
+    --h-good: #1a7f37;
+    --h-warn: #b07800;
+    --h-fail: #cf222e;
+    --h-unknown: #8c959f;
+    --warn-ink: #7a5200;
+    --warn-bg: rgba(176, 120, 0, 0.12);
+    --err-ink: #a40e26;
+    --err-bg: rgba(207, 34, 46, 0.09);
+    --map-floor: #f3f5f8;
+    --map-grid: rgba(50, 70, 90, 0.12);
+    --map-wall: #6e7b88;
+    --map-outline: #2b3846;
+    --map-tick: #5b6979;
+    --map-label: rgba(255, 255, 255, 0.92);
+    --map-outside: rgba(110, 120, 130, 0.16);
+    --puck: #ffffff;
+    --puck-edge: #8995a2;
+    --rx: #1d2833;
+    --tx: #1f6feb;
+    --track: #008aa8;
+    --track-fill: rgba(0, 138, 168, 0.14);
+    --lost: #1d2833;
+    --busy: #b06a00;
+    --support: #c4321f;
+    --blind: #3346a3;
+    --heat-ramp: linear-gradient(90deg, rgba(255, 237, 160, 0) 0%, rgb(254, 178, 76) 25%, rgb(240, 59, 32) 50%,
+      rgb(189, 0, 38) 75%, rgb(110, 0, 30) 100%);
+    --shadow: 0 1px 2px rgba(16, 24, 32, 0.06), 0 8px 20px rgba(16, 24, 32, 0.06);
+  }
+
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font: 15px/1.45 var(--sans);
     font-variant-numeric: tabular-nums;
   }
-  header.top {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
-    padding: 12px 16px; border-bottom: 1px solid var(--line);
-  }
-  h1 { font-size: 1.4rem; margin: 0; font-weight: 650; letter-spacing: 0.01em; }
-  .spacer { flex: 1 1 auto; }
-  .conn { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 1.05rem; }
-  .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--nosig); }
-  .dot.connecting { background: var(--warm); }
-  .dot.live { background: var(--empty); }
-  .dot.reconnecting { background: var(--uncal); }
-  .dot.finished { background: var(--nosig); }
-  .paused-flag {
-    padding: 4px 10px; border-radius: 6px; background: var(--uncal); color: #0b0f14;
-    font-weight: 800; letter-spacing: 0.06em;
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 0.82rem; }
+  .app { overflow-x: clip; }   /* a safety net: nothing may scroll the page sideways */
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
   }
   button {
-    font: inherit; font-weight: 600; min-height: 44px; min-width: 110px; padding: 8px 18px;
-    border-radius: 8px; border: 1px solid #3b4a5c; background: var(--panel-2); color: var(--text); cursor: pointer;
+    font: inherit; font-weight: 650; min-height: 38px; padding: 6px 14px; border-radius: 8px;
+    border: 1px solid var(--line-2); background: var(--surface-2); color: var(--text); cursor: pointer;
   }
-  button:focus-visible { outline: 3px solid var(--sender); outline-offset: 2px; }
-  button[aria-pressed="true"] { border-color: var(--uncal); color: var(--uncal); }
+  button:hover:not(:disabled) { border-color: var(--muted); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+  .tag {
+    display: inline-block; padding: 1px 7px; border-radius: 4px; border: 1px solid var(--line-2);
+    font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em; color: var(--muted);
+  }
 
-  .statusbar {
-    display: flex; flex-wrap: wrap; gap: 10px 28px; padding: 10px 16px;
-    background: var(--panel); border-bottom: 1px solid var(--line); font-size: 0.98rem;
+  /* ---- status strip: the room state first */
+  .strip {
+    position: sticky; top: 0; z-index: 20;
+    display: grid; align-items: center; gap: 10px 22px;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    grid-template-areas: "brand pill metrics actions";
+    padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line);
   }
-  .group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-  .label { color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.78rem; font-weight: 650; }
+  .brand { grid-area: brand; display: grid; gap: 4px; min-width: 0; }
+  h1 {
+    margin: 0; font-size: 0.8rem; font-weight: 750; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .conn { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-weight: 650; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--s-nosig); }
+  .dot.connecting { background: var(--s-warmup); }
+  .dot.live { background: var(--s-empty); box-shadow: 0 0 0 3px var(--tint-empty); }
+  .dot.reconnecting, .dot.stale { background: var(--s-uncal); box-shadow: none; }
+  .dot.finished { background: var(--s-nosig); }
+
+  .pill {
+    grid-area: pill; display: grid; justify-items: start; gap: 1px; min-width: 240px; max-width: 420px;
+    padding: 7px 18px 9px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--surface-2);
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  }
+  .pill-kicker {
+    font-size: 0.66rem; font-weight: 750; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.8;
+  }
+  .pill-label { font-size: 1.7rem; line-height: 1.05; font-weight: 850; letter-spacing: 0.08em; }
+  .pill-detail { font-size: 0.82rem; font-weight: 600; opacity: 0.92; }
+  .pill.motion { background: var(--s-motion); border-color: var(--s-motion); color: #ffffff; }
+  .pill.clear { background: var(--tint-empty); border-color: var(--s-empty); color: var(--s-empty); }
+  .pill.clear .pill-detail { color: var(--text-2); }
+  .pill.learning { background: var(--tint-warmup); border-color: var(--s-warmup); color: var(--text); }
+  .pill.uncal { background: var(--warn-bg); border-color: var(--s-uncal); color: var(--warn-ink); }
+  .pill.nodata { background: transparent; border-style: dashed; border-color: var(--muted); color: var(--muted); }
+
+  .metrics { grid-area: metrics; display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; min-width: 0; }
+  .metric { min-width: 0; }
+  .metric dt {
+    font-size: 0.68rem; font-weight: 750; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);
+  }
+  .metric dd { margin: 0; font-weight: 650; overflow-wrap: anywhere; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
   .chip {
-    display: inline-block; padding: 2px 9px; border-radius: 6px; background: var(--panel-2);
-    border: 1px solid var(--line); font-weight: 650;
+    display: inline-block; padding: 1px 8px; border-radius: 6px; border: 1px solid var(--line-2);
+    background: var(--surface-2); font-size: 0.85rem; font-weight: 650;
   }
-  .chip.connected { border-color: var(--empty); }
-  .chip.finished { border-color: var(--nosig); color: var(--muted); }
-  .chip.failed { border-color: var(--motion); color: #ffb4ae; background: #3a1716; }
-  .chip.state { border-left-width: 4px; }
-  .msgs { margin: 0; padding: 0; list-style: none; color: var(--uncal); }
-  .msgs li { margin: 0; }
-  .msgs li.muted { color: var(--muted); }
-  .muted { color: var(--muted); }
+  .chip.connected { border-color: var(--s-empty); }
+  .chip.finished { color: var(--muted); }
+  .chip.failed { border-color: var(--h-fail); color: var(--err-ink); background: var(--err-bg); }
 
-  main.layout {
-    display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, 1fr);
-    gap: 16px; padding: 16px; align-items: start;
+  .actions {
+    grid-area: actions; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px;
+  }
+  .paused-flag {
+    padding: 4px 10px; border-radius: 6px; background: var(--s-uncal); color: var(--on-state);
+    font-weight: 800; letter-spacing: 0.06em;
+  }
+  #pause[aria-pressed="true"] { border-color: var(--s-uncal); background: var(--warn-bg); color: var(--warn-ink); }
+  .cal-live { border-color: var(--s-uncal); background: var(--warn-bg); color: var(--warn-ink); }
+
+  .msgbar { padding: 6px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .msgs {
+    list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 4.6em; overflow-y: auto;
+    font-size: 0.86rem; overflow-wrap: anywhere;
+  }
+  .msg.warn { color: var(--warn-ink); }
+  .msg.err { color: var(--err-ink); font-weight: 650; }
+  .msg.cmd { color: var(--muted); }
+
+  /* ---- main: the map, then links and pucks */
+  .layout {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 410px); gap: 16px; padding: 16px;
+    align-items: start;
   }
   .card {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-width: 0;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px;
+    min-width: 0; box-shadow: var(--shadow);
   }
-  .card.paused { border-color: var(--uncal); box-shadow: 0 0 0 2px rgba(227, 160, 8, 0.35); }
+  .card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 10px; }
   .card h2 {
-    font-size: 0.95rem; margin: 0 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em;
+    margin: 0; font-size: 0.76rem; font-weight: 750; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted);
   }
-  #map { display: block; width: 100%; height: 300px; }
-  .caption { margin: 12px 0 8px; font-size: 1.05rem; font-weight: 650; }
-  .busy-note { margin: 0 0 8px; color: var(--uncal); font-weight: 650; }
-  .track-note { margin: 0 0 8px; color: var(--track); font-weight: 650; }
+  .map-card.paused { border-color: var(--s-uncal); box-shadow: 0 0 0 2px var(--warn-bg); }
+  .layers { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+  .toggle {
+    display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 4px 11px 4px 9px;
+    border: 1px solid var(--line-2); border-radius: 999px; font-size: 0.85rem; font-weight: 650;
+    color: var(--text-2); cursor: pointer; user-select: none;
+  }
+  .toggle input {
+    appearance: none; -webkit-appearance: none; display: grid; place-content: center; flex: none;
+    width: 15px; height: 15px; margin: 0; border-radius: 4px; border: 1.5px solid var(--muted); background: transparent;
+  }
+  .toggle input:checked { background: var(--accent); border-color: var(--accent); }
+  .toggle input:checked::after {
+    content: ""; width: 8px; height: 4px; margin-top: -2px;
+    border: solid var(--on-accent); border-width: 0 0 2px 2px; transform: rotate(-45deg);
+  }
+  .toggle:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+  .toggle:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+  #map { display: block; width: 100%; height: 300px; touch-action: manipulation; }
+  .caption { margin: 10px 0 2px; font-size: 1rem; font-weight: 700; }
+  .caption-sub { margin: 0 0 8px; font-size: 0.86rem; color: var(--muted); }
+  .note { margin: 0 0 6px; font-size: 0.92rem; font-weight: 650; }
+  .busy-note { color: var(--busy); }
+  .track-note { color: var(--track); }
   .track-note.lost { color: var(--text); }
-  .track-toggle { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 8px; color: var(--muted); }
-  .track-toggle input { width: 18px; height: 18px; margin: 0; }
-  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.92rem; color: var(--muted); }
-  .sw {
-    display: inline-block; width: 16px; height: 6px; border-radius: 3px; margin-right: 6px; vertical-align: middle;
-  }
-  .sw.EMPTY { background: var(--empty); }
-  .sw.MOTION { background: var(--motion); }
-  .sw.NO_SIGNAL { background: var(--nosig); }
-  .sw.UNCALIBRATED { background: var(--uncal); }
-  .sw.WARMUP { background: var(--warm); }
-  .shape-rx { display: inline-block; width: 11px; height: 11px; background: #e8edf3; margin-right: 6px; vertical-align: middle; }
-  .shape-tx {
-    display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: var(--sender);
-    margin-right: 6px; vertical-align: middle;
-  }
-  .shape-busy {
-    display: inline-block; width: 13px; height: 13px; border-radius: 50%; border: 3px solid var(--uncal);
-    margin-right: 6px; vertical-align: middle;
-  }
-  .shape-track {
-    display: inline-block; width: 16px; height: 11px; border-radius: 50%; border: 2px solid var(--track);
-    background: rgba(77, 232, 255, 0.25); margin-right: 6px; vertical-align: middle;
-  }
-  .shape-lost {
-    display: inline-block; width: 13px; height: 13px; border-radius: 50%; border: 2px dashed var(--text);
-    margin-right: 6px; vertical-align: middle;
-  }
+  .coverage-note { color: var(--text-2); font-weight: 600; }
 
-  .link { padding: 12px 0; border-top: 1px solid var(--line); }
-  .link:first-child { border-top: 0; padding-top: 0; }
-  .head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-  .lid { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 1.15rem; font-weight: 700; }
-  .route { color: var(--muted); font-size: 0.92rem; flex: 1 1 auto; }
-  .badge {
-    padding: 2px 9px; border-radius: 5px; font-weight: 750; font-size: 0.85rem; letter-spacing: 0.04em; color: #0b0f14;
+  .legend {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px 18px;
+    margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 0.84rem; color: var(--text-2);
   }
-  .badge.s-EMPTY { background: var(--empty); }
-  .badge.s-MOTION { background: var(--motion); }
-  .badge.s-NO_SIGNAL { background: var(--nosig); }
-  .badge.s-UNCALIBRATED { background: var(--uncal); }
-  .badge.s-WARMUP { background: var(--warm); }
-  .contrib {
-    font-size: 0.85rem; padding: 2px 8px; border-radius: 5px; border: 1px solid var(--line); color: var(--muted);
+  .legend h3 {
+    margin: 0 0 5px; font-size: 0.66rem; font-weight: 750; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted);
   }
-  .contrib.on { border-color: var(--motion); color: #ffb4ae; font-weight: 650; }
-  .bar {
-    position: relative; height: 12px; margin: 10px 0 8px; background: #0b1017;
-    border: 1px solid var(--line); border-radius: 6px;
+  .legend ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .legend li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .heat-bar {
+    height: 10px; border-radius: 3px; border: 1px solid var(--line); background: var(--heat-ramp), var(--map-floor);
   }
-  .fill { height: 100%; width: 0; border-radius: 6px; }
-  .mark { position: absolute; left: 50%; top: -5px; bottom: -5px; width: 2px; background: var(--text); }
-  .nums {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 6px 12px; margin: 0;
+  .heat-scale {
+    display: flex; justify-content: space-between; margin-top: 3px; font-size: 0.78rem; color: var(--muted);
   }
-  .kv dt { font-size: 0.76rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
-  .kv dd { margin: 0; font-size: 1.05rem; font-weight: 650; }
-  .kv dd.warn { color: #ffb4ae; }
-  .spark {
-    display: block; width: 100%; height: 36px; margin-top: 10px; border-radius: 6px; background: #0b1017;
+  .lg-ln { display: inline-block; flex: none; width: 24px; border-top: 3px solid var(--s-nosig); }
+  .lg-ln.EMPTY { border-top-color: var(--s-empty); }
+  .lg-ln.MOTION { border-top-color: var(--s-motion); border-top-width: 5px; }
+  .lg-ln.WARMUP { border-top-color: var(--s-warmup); border-top-style: dotted; }
+  .lg-ln.UNCALIBRATED { border-top-color: var(--s-uncal); border-top-style: dashed; }
+  .lg-ln.NO_SIGNAL { border-top-color: var(--s-nosig); border-top-style: dashed; }
+  .lg-ring {
+    display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 50%;
+    border: 3px solid var(--h-unknown);
   }
+  .lg-ring.good { border-color: var(--h-good); }
+  .lg-ring.warn { border-color: var(--h-warn); }
+  .lg-ring.fail { border-color: var(--h-fail); border-style: dashed; }
+  .lg-halo {
+    display: inline-block; flex: none; width: 18px; height: 18px; border-radius: 50%; border: 3px solid var(--busy);
+  }
+  .lg-trail {
+    display: inline-block; flex: none; width: 26px; height: 4px; border-radius: 2px;
+    background: linear-gradient(90deg, transparent, var(--track));
+  }
+  .lg-blind {
+    display: inline-block; flex: none; width: 20px; height: 14px; border-radius: 3px; border: 1px solid var(--line-2);
+    background: repeating-linear-gradient(135deg, var(--blind) 0 2px, transparent 2px 6px);
+  }
+  .ico { flex: none; width: 20px; height: 20px; }
+  .ico.track { color: var(--track); }
+  .ico.lost { color: var(--lost); }
+  .ico.support { color: var(--support); }
 
-  .controls {
-    margin: 0 16px 24px; padding: 14px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted);
+  .side { display: grid; gap: 16px; min-width: 0; }
+  .counts { display: flex; flex-wrap: wrap; gap: 4px; }
+  .count {
+    padding: 0 7px; border-radius: 999px; border: 1px solid var(--line-2); font-size: 0.72rem; font-weight: 750;
+    letter-spacing: 0.03em; white-space: nowrap;
   }
-  .controls h2 { font-size: 0.95rem; margin: 0; text-transform: uppercase; letter-spacing: 0.06em; }
-  .ctl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-top: 10px; }
+  .count.s-MOTION { border-color: var(--s-motion); color: var(--s-motion); }
+  .count.s-EMPTY { border-color: var(--s-empty); color: var(--s-empty); }
+  .count.s-WARMUP { border-color: var(--s-warmup); }
+  .count.s-UNCALIBRATED { border-color: var(--s-uncal); color: var(--warn-ink); }
+  .count.zero { display: none; }
+  .seg {
+    display: inline-flex; margin-left: auto; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden;
+  }
+  .seg button {
+    min-height: 30px; padding: 3px 10px; border: 0; border-radius: 0; background: transparent; font-size: 0.8rem;
+  }
+  .seg button + button { border-left: 1px solid var(--line-2); }
+  .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); }
+
+  /* one compact row per link; details open on click */
+  .link-list, .puck-list { display: grid; gap: 6px; }
+  .lrow {
+    border: 1px solid var(--line); border-left: 4px solid var(--s-nosig); border-radius: 8px;
+    background: var(--surface-2); padding: 4px 10px 8px;
+  }
+  .lrow.s-MOTION {
+    border-left-color: var(--s-motion); background: linear-gradient(90deg, var(--err-bg), var(--surface-2) 60%);
+  }
+  .lrow.s-EMPTY { border-left-color: var(--s-empty); }
+  .lrow.s-WARMUP { border-left-color: var(--s-warmup); }
+  .lrow.s-UNCALIBRATED { border-left-color: var(--s-uncal); }
+  .lrow.s-NO_SIGNAL { border-left-style: dashed; }
+  .lrow.rel { border-color: var(--line-2); }
+  .lrow.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .lrow-head {
+    display: grid; grid-template-columns: 12px minmax(0, 1fr) auto 3.4em; align-items: center; gap: 8px;
+    width: 100%; min-height: 36px; padding: 2px 0; border: 0; border-radius: 6px; background: none;
+    color: inherit; text-align: left; font-weight: 600;
+  }
+  .lrow-head::before {
+    content: ""; width: 0; height: 0; border-style: solid; border-width: 5px 0 5px 7px;
+    border-color: transparent transparent transparent var(--muted); transition: transform 0.15s ease;
+  }
+  .lrow-head[aria-expanded="true"]::before { transform: rotate(90deg); }
+  .lrow-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
+  .lrow-route { font-weight: 750; }
+  .lrow-id { font-family: var(--mono); font-size: 0.76rem; color: var(--muted); }
+  .lrow-ratio { text-align: right; font-weight: 750; }
+  .spill {
+    padding: 1px 7px; border-radius: 5px; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.05em;
+    color: var(--on-state); background: var(--s-nosig); white-space: nowrap;
+  }
+  .spill.s-MOTION { background: var(--s-motion); }
+  .spill.s-EMPTY { background: var(--s-empty); }
+  .spill.s-WARMUP { background: var(--s-warmup); }
+  .spill.s-UNCALIBRATED { background: var(--s-uncal); }
+  .lbar { position: relative; height: 6px; margin: 4px 0 7px 20px; border-radius: 3px; background: var(--surface-3); }
+  .lbar-fill { height: 100%; width: 0; border-radius: 3px; background: var(--s-nosig); }
+  .s-MOTION .lbar-fill { background: var(--s-motion); }
+  .s-EMPTY .lbar-fill { background: var(--s-empty); }
+  .s-WARMUP .lbar-fill { background: var(--s-warmup); }
+  .s-UNCALIBRATED .lbar-fill { background: var(--s-uncal); }
+  .lbar-mark {
+    position: absolute; left: 50%; top: -3px; bottom: -3px; width: 2px; border-radius: 1px;
+    background: var(--text-2);
+  }
+  .lrow-health { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 8px; margin-left: 20px; }
+  .hm { display: grid; min-width: 0; }
+  .hm-k {
+    font-size: 0.64rem; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+  }
+  .hm-v { font-size: 0.86rem; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hm.warn .hm-v { color: var(--warn-ink); }
+  .hm.warn .hm-k::after { content: " !"; color: var(--warn-ink); }
+  .s-NO_SIGNAL .hm-v { color: var(--muted); }
+  .lrow-issues { margin: 6px 0 0 20px; font-size: 0.8rem; font-weight: 650; color: var(--warn-ink); }
+  .s-NO_SIGNAL .lrow-issues { color: var(--err-ink); }
+  .lrow-details { margin: 8px 0 0 20px; padding-top: 8px; border-top: 1px dashed var(--line-2); }
+  .kv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px 10px; margin: 0; }
+  .kv dt {
+    font-size: 0.64rem; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+  }
+  .kv dd { margin: 0; font-size: 0.9rem; font-weight: 650; overflow-wrap: anywhere; }
+  .spark { display: block; width: 100%; height: 40px; margin-top: 8px; border-radius: 6px; }
+
+  .prow {
+    display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 4px 10px;
+    width: 100%; min-height: 48px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--surface-2); color: inherit; text-align: left; font-weight: 500;
+  }
+  .prow.rel { border-color: var(--line-2); }
+  .prow.sel, .prow[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+  .pglyph {
+    position: relative; display: inline-block; flex: none; width: 26px; height: 26px; border-radius: 50%;
+    border: 3px solid var(--h-unknown); background: var(--puck);
+  }
+  .pglyph::after {
+    content: ""; position: absolute; inset: 0; margin: auto; width: 9px; height: 9px; border-radius: 2px;
+    background: var(--rx);
+  }
+  .pglyph.tx::after {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--tx);
+    box-shadow: 0 0 0 2px var(--puck), 0 0 0 3.5px var(--tx);
+  }
+  .h-good .pglyph, .pglyph.good { border-color: var(--h-good); }
+  .h-warn .pglyph, .pglyph.warn { border-color: var(--h-warn); }
+  .h-fail .pglyph, .pglyph.fail { border-color: var(--h-fail); border-style: dashed; }
+  .prow-main { display: grid; min-width: 0; }
+  .prow-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+  .prow-name { font-weight: 750; }
+  .prow-role, .prow-sub { font-size: 0.8rem; color: var(--muted); }
+  .prow-stat { font-size: 0.8rem; font-weight: 700; white-space: nowrap; }
+  .h-good .prow-stat { color: var(--h-good); }
+  .h-warn .prow-stat { color: var(--warn-ink); }
+  .h-fail .prow-stat { color: var(--err-ink); }
+
+  /* ---- controls drawer: a side sheet over the right column, so the map stays in view while tuning */
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 40; width: min(460px, 100%);
+    display: flex; flex-direction: column; background: var(--surface); border-left: 1px solid var(--line-2);
+    box-shadow: -18px 0 40px rgba(0, 0, 0, 0.35);
+    transform: translateX(100%); visibility: hidden; transition: transform 0.22s ease, visibility 0s linear 0.22s;
+  }
+  .drawer.open { transform: none; visibility: visible; transition: transform 0.22s ease; }
+  .drawer-head {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .drawer-head h2 { margin: 0; font-size: 1rem; }
+  .drawer-head .muted { flex: 1 1 auto; font-size: 0.82rem; }
+  .drawer-body { display: grid; gap: 14px; padding: 14px 16px 28px; overflow-y: auto; }
   .ctl-block {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0;
-    color: var(--text);
+    padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); min-width: 0;
   }
   .ctl-block h3 { margin: 0 0 8px; font-size: 0.95rem; }
-  .ctl-row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; margin: 6px 0; }
-  .ctl-row label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--muted); }
-  .controls input[type="number"] {
-    font: inherit; min-height: 40px; width: 110px; padding: 6px 8px; border-radius: 8px;
-    border: 1px solid #3b4a5c; background: #0b1017; color: var(--text);
+  .ctl-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; margin: 8px 0; }
+  .ctl-row label { display: grid; gap: 4px; font-size: 0.82rem; color: var(--muted); }
+  .check { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; font-size: 0.9rem; }
+  .check input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+  .hint { margin: 2px 0 6px; font-size: 0.8rem; color: var(--muted); }
+  .drawer input[type="number"] {
+    font: inherit; width: 104px; min-height: 38px; padding: 6px 8px; border-radius: 8px;
+    border: 1px solid var(--line-2); background: var(--surface); color: var(--text);
   }
-  .controls button:disabled { opacity: 0.45; cursor: not-allowed; }
-  .controls button { min-width: 0; min-height: 40px; }
-  .ctl-note { color: var(--uncal); margin: 8px 0 0; }
-  .ctl-error { color: #ffb4ae; margin: 6px 0 0; }
-  .cal-state { margin: 6px 0; color: var(--text); font-weight: 600; }
-  .cal-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin-top: 8px; color: var(--text); }
-  .cal-table th, .cal-table td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
-  .cal-table tr.warn td { color: #ffb4ae; background: #3a1716; }
-  .thr-row { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+  .drawer input[type="range"] { width: 100%; accent-color: var(--accent); }
+  .ctl-note {
+    margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--warn-bg); color: var(--warn-ink);
+    font-weight: 600;
+  }
+  .ctl-error { margin: 6px 0 0; color: var(--err-ink); font-weight: 600; }
+  .cal-state { margin: 6px 0; font-weight: 650; }
+  .cal-state[data-state="countdown"], .cal-state[data-state="recording"] { color: var(--warn-ink); }
+  .cal-state[data-state="failed"] { color: var(--err-ink); }
+  .table-wrap { overflow-x: auto; }
+  .cal-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.86rem; }
+  .cal-table th, .cal-table td { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: left; }
+  .cal-table th { font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .cal-table tr.warn td { color: var(--err-ink); background: var(--err-bg); }
+  .thr-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 8px 0;
+    border-top: 1px solid var(--line);
+  }
   .thr-row:first-child { border-top: 0; padding-top: 0; }
-  .thr-row .lid { min-width: 96px; }
-  .thr-row .thr-cur { flex: 1 1 100%; font-size: 0.88rem; }
-  .thr-row .thr-input { width: 120px; }
-  .tune-row { display: grid; grid-template-columns: 110px 1fr 56px; gap: 8px; align-items: center; margin: 8px 0; }
-  .tune-row output { font-variant-numeric: tabular-nums; text-align: right; }
+  .thr-row .lid { min-width: 88px; font-family: var(--mono); font-weight: 700; }
+  .thr-row .thr-cur { flex: 1 1 100%; font-size: 0.84rem; }
+  .thr-row button { min-height: 36px; padding: 4px 12px; }
+  .tune-row {
+    display: grid; grid-template-columns: 96px minmax(0, 1fr) 48px; align-items: center; gap: 8px; margin: 10px 0;
+  }
+  .tune-row output { text-align: right; font-weight: 650; }
 
-  @media (max-width: 820px) {
-    main.layout { grid-template-columns: 1fr; padding: 12px; gap: 12px; }
-    header.top { padding: 10px 12px; }
-    .statusbar { padding: 10px 12px; }
-    .controls { margin: 0 12px 20px; }
+  /* ---- demo view: the map and the room state, large, for an audience */
+  .demo .layout { grid-template-columns: minmax(0, 1fr); }
+  .demo .side, .demo #drawer-toggle, .demo .metric.aux, .demo .msg.cmd, .demo .msgbar.quiet { display: none; }
+  .demo .pill { min-width: 340px; max-width: 560px; padding: 10px 28px 12px; }
+  .demo .pill-label { font-size: 2.9rem; }
+  .demo .pill-detail { font-size: 1.02rem; }
+  .demo .metric dd { font-size: 1.15rem; }
+  .demo .caption { font-size: 1.15rem; }
+
+  @media (max-width: 1500px) {
+    .strip {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-areas: "brand pill actions" "metrics metrics metrics";
+    }
+    .pill { justify-self: start; }
+  }
+  @media (max-width: 1020px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 700px) {
+    .strip {
+      position: static; grid-template-columns: minmax(0, 1fr);
+      grid-template-areas: "brand" "pill" "metrics" "actions"; padding: 10px 12px;
+    }
+    .pill, .demo .pill { min-width: 0; max-width: none; width: 100%; }
+    .actions { justify-content: flex-start; }
+    .layout { padding: 10px; gap: 10px; }
+    .card { padding: 10px; }
+    .msgbar { padding: 6px 12px; }
+    .lrow-health { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .tune-row { grid-template-columns: 80px minmax(0, 1fr) 44px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition: none !important; animation: none !important; scroll-behavior: auto !important;
+    }
   }
 </style>
 </head>
 <body>
-<header class="top">
-  <h1>CSI room map</h1>
-  <div class="conn" role="status" aria-live="polite">
-    <span class="dot connecting" id="conn-dot"></span>
-    <span id="conn-text">connecting</span>
+<div class="app" id="app">
+<header class="strip" aria-label="Status">
+  <div class="brand">
+    <h1>CSI room map</h1>
+    <div class="conn" role="status" aria-live="polite">
+      <span class="dot connecting" id="conn-dot"></span>
+      <span id="conn-text">connecting</span>
+      <span class="tag" id="replay-chip" hidden>REPLAY</span>
+    </div>
   </div>
-  <span class="paused-flag" id="paused-flag" hidden>PAUSED</span>
-  <span class="spacer"></span>
-  <button type="button" id="pause" aria-pressed="false">Pause</button>
+  <div class="pill nodata" id="room-pill">
+    <span class="pill-kicker">Room</span>
+    <span class="pill-label" id="room-state">NO DATA</span>
+    <span class="pill-detail" id="room-reason">waiting for the server</span>
+  </div>
+  <p class="sr-only" id="room-announce" role="status" aria-live="polite"></p>
+  <dl class="metrics">
+    <div class="metric"><dt>Last motion</dt><dd id="last-motion">-</dd></div>
+    <div class="metric"><dt>Links agreeing</dt><dd id="agree">-</dd></div>
+    <div class="metric"><dt>Estimator</dt><dd id="estimator">-</dd></div>
+    <div class="metric"><dt>Receivers</dt><dd class="chips" id="receivers"><span class="muted">waiting</span></dd></div>
+    <div class="metric aux"><dt>Packet time</dt><dd id="pkt-time">-</dd></div>
+    <div class="metric aux"><dt>Calibration</dt><dd id="calib">-</dd></div>
+  </dl>
+  <div class="actions">
+    <button type="button" class="cal-live" id="cal-live" hidden></button>
+    <span class="paused-flag" id="paused-flag" hidden>PAUSED</span>
+    <button type="button" id="pause" aria-pressed="false">Pause</button>
+    <button type="button" id="demo" aria-pressed="false"
+      title="Large map and room state for an audience (key D)">Demo</button>
+    <button type="button" id="drawer-toggle" aria-expanded="false" aria-controls="controls">Controls</button>
+    <button type="button" id="theme" aria-label="Switch to the light theme">Light</button>
+  </div>
 </header>
-
-<section class="statusbar" aria-label="Status">
-  <div class="group"><span class="label">Receivers</span><span id="receivers"><span class="muted">waiting</span></span></div>
-  <div class="group"><span class="label">Links</span><span id="link-counts"></span></div>
-  <div class="group"><span class="label">Calibration</span><span id="calib">-</span></div>
-  <div class="group"><span class="label">Packet time</span><span id="pkt-time">-</span></div>
-  <div class="group"><span class="label">Last motion</span><span id="last-motion">-</span></div>
-  <div class="group"><span class="label">Messages</span><ul class="msgs" id="messages"><li class="muted">none</li></ul></div>
-</section>
+<div class="msgbar" id="msgbar" hidden>
+  <ul class="msgs" id="messages" aria-label="Messages"></ul>
+</div>
 
 <main class="layout">
-  <section class="card" id="map-card">
-    <h2>Room</h2>
-    <canvas id="map" role="img" aria-label="Room map: heatmap of likely motion, with the room's links and nodes"></canvas>
+  <section class="card map-card" id="map-card" aria-labelledby="map-title">
+    <div class="card-head">
+      <h2 id="map-title">Room map</h2>
+      <div class="layers" role="group" aria-label="Map layers">
+        <label class="toggle"><input type="checkbox" id="layer-heat" checked> Heat</label>
+        <label class="toggle"><input type="checkbox" id="layer-links" checked> Links</label>
+        <label class="toggle" title="Show the person track">
+          <input type="checkbox" id="track-show" checked> Person track</label>
+        <label class="toggle" title="Blind spots from the puck positions: cells fewer than 3 links cross">
+          <input type="checkbox" id="layer-coverage"> Coverage</label>
+      </div>
+    </div>
+    <canvas id="map" role="img"
+      aria-label="Room map: heatmap of likely motion, with the pucks and their links"></canvas>
     <p class="caption" id="map-caption">Rough motion-likelihood estimate from 4 links (back-projection).</p>
-    <p class="busy-note" id="busy-note" role="status" hidden></p>
-    <p class="track-note" id="track-note" hidden></p>
-    <label class="track-toggle"><input type="checkbox" id="track-show" checked> Show the person track</label>
-    <div class="legend">
-      <span><span class="sw EMPTY"></span>EMPTY</span>
-      <span><span class="sw MOTION"></span>MOTION</span>
-      <span><span class="sw NO_SIGNAL"></span>NO_SIGNAL</span>
-      <span><span class="sw UNCALIBRATED"></span>UNCALIBRATED</span>
-      <span><span class="sw WARMUP"></span>WARMUP</span>
-      <span><span class="shape-rx"></span>receiver</span>
-      <span><span class="shape-tx"></span>sender</span>
-      <span><span class="shape-busy"></span>activity near a node</span>
-      <span><span class="shape-track"></span>person track (1&sigma;), last 20 s</span>
-      <span><span class="shape-lost"></span>last seen</span>
+    <p class="caption-sub">It shows roughly where something changed (to within a few metres), not an exact position.
+      A person who stays still fades from the map within about 30 s.</p>
+    <p class="note busy-note" id="busy-note" role="status" hidden></p>
+    <p class="note track-note" id="track-note" hidden></p>
+    <p class="note coverage-note" id="coverage-note" hidden></p>
+    <div class="legend" aria-label="Legend">
+      <div>
+        <h3>Heat: motion likelihood</h3>
+        <div class="heat-bar" aria-hidden="true"></div>
+        <div class="heat-scale"><span>low</span><span id="heat-peak">peak -</span><span>high</span></div>
+      </div>
+      <div>
+        <h3>Links: colour is state, width is evidence</h3>
+        <ul>
+          <li><span class="lg-ln EMPTY"></span>EMPTY</li>
+          <li><span class="lg-ln MOTION"></span>MOTION</li>
+          <li><span class="lg-ln WARMUP"></span>WARMUP</li>
+          <li><span class="lg-ln UNCALIBRATED"></span>UNCALIBRATED</li>
+          <li><span class="lg-ln NO_SIGNAL"></span>NO SIGNAL</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Pucks</h3>
+        <ul>
+          <li><span class="pglyph good" aria-hidden="true"></span>receiver</li>
+          <li><span class="pglyph tx good" aria-hidden="true"></span>sender</li>
+          <li><span class="lg-ring good"></span>links good <span class="lg-ring warn"></span>check
+            <span class="lg-ring fail"></span>failing</li>
+          <li><span class="lg-halo"></span>activity near a puck</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Person</h3>
+        <ul>
+          <li><svg class="ico track" viewBox="0 0 24 24" aria-hidden="true">
+            <ellipse cx="12" cy="12" rx="10" ry="6" fill="currentColor" fill-opacity="0.16" stroke="currentColor"
+              stroke-width="2" transform="rotate(-25 12 12)"/>
+            <circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg>track and its 1&sigma; ellipse</li>
+          <li><span class="lg-trail"></span>trail, last 20 s</li>
+          <li><svg class="ico lost" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.8"
+              stroke-dasharray="3 3"/>
+            <path d="M8 8l8 8M16 8l-8 8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+          </svg>last seen</li>
+          <li><svg class="ico support" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5" stroke="currentColor" stroke-width="2"/>
+          </svg>where agreeing links cross</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Coverage layer</h3>
+        <ul>
+          <li><span class="lg-blind"></span>fewer than 3 links: blind spot</li>
+        </ul>
+      </div>
     </div>
   </section>
 
-  <section class="card" id="links-card" aria-labelledby="links-title">
-    <h2 id="links-title">Links</h2>
-    <div id="links"><p class="muted">waiting for data</p></div>
-  </section>
+  <aside class="side" aria-label="Links and pucks">
+    <section class="card" id="links-card" aria-labelledby="links-title">
+      <div class="card-head">
+        <h2 id="links-title">Links</h2>
+        <span class="counts" id="link-counts"></span>
+        <div class="seg" role="group" aria-label="Sort the links">
+          <button type="button" id="sort-attention" aria-pressed="true">Attention</button>
+          <button type="button" id="sort-name" aria-pressed="false">Name</button>
+        </div>
+      </div>
+      <div class="link-list" id="links"><p class="muted">waiting for data</p></div>
+    </section>
+    <section class="card" id="pucks-card" aria-labelledby="pucks-title">
+      <div class="card-head">
+        <h2 id="pucks-title">Pucks</h2>
+        <span class="muted small" id="pucks-summary"></span>
+      </div>
+      <div class="puck-list" id="pucks"><p class="muted">waiting for data</p></div>
+    </section>
+  </aside>
 </main>
 
-<section class="controls" id="controls" aria-label="Controls">
-  <h2>Controls</h2>
-  <p class="ctl-note" id="ctl-reason" hidden></p>
-  <div class="ctl-grid">
-    <div class="ctl-block" aria-labelledby="cal-title">
+<section class="drawer" id="controls" aria-labelledby="controls-title">
+  <header class="drawer-head">
+    <h2 id="controls-title">Controls</h2>
+    <span class="muted">calibration, thresholds, heatmap tuning</span>
+    <button type="button" id="drawer-close">Close</button>
+  </header>
+  <div class="drawer-body">
+    <p class="ctl-note" id="ctl-reason" hidden></p>
+    <div class="ctl-block" role="group" aria-labelledby="cal-title">
       <h3 id="cal-title">Calibrate on an empty room</h3>
       <div class="ctl-row">
         <label>Clips <input type="number" id="cal-clips" min="1" max="10" step="1" value="3"></label>
         <label>Seconds per clip <input type="number" id="cal-seconds" min="1" max="120" step="1" value="20"></label>
         <label>Margin <input type="number" id="cal-margin" min="0.1" max="10" step="0.05" value="1.25"></label>
       </div>
+      <label class="check"><input type="checkbox" id="cal-noisy" autocomplete="off">
+        noisy room (do not reject movement)</label>
+      <p class="hint">Only for a room that cannot be cleared: movement in the clips raises the thresholds.</p>
       <div class="ctl-row">
-        <label><input type="checkbox" id="cal-noisy"> noisy room (do not reject movement)</label>
-      </div>
-      <div class="ctl-row">
-        <button type="button" id="cal-start">Start calibration</button>
+        <button type="button" class="primary" id="cal-start">Start calibration</button>
         <button type="button" id="cal-cancel" disabled>Cancel</button>
       </div>
       <p class="cal-state" id="cal-state" aria-live="polite">Idle. Keep the room empty when you start.</p>
-      <div id="cal-result"></div>
+      <div class="table-wrap" id="cal-result"></div>
       <p class="ctl-error" id="cal-error" role="alert" hidden></p>
     </div>
-    <div class="ctl-block" aria-labelledby="thr-title">
+    <div class="ctl-block" role="group" aria-labelledby="thr-title">
       <h3 id="thr-title">Link thresholds</h3>
       <div id="thr-list"><p class="muted">waiting for links</p></div>
       <div class="ctl-row">
@@ -270,7 +745,7 @@
       </div>
       <p class="ctl-error" id="thr-error" role="alert" hidden></p>
     </div>
-    <div class="ctl-block" aria-labelledby="tune-title">
+    <div class="ctl-block" role="group" aria-labelledby="tune-title">
       <h3 id="tune-title">Heatmap tuning</h3>
       <div class="tune-row">
         <span>Sensitivity</span>
@@ -292,10 +767,12 @@
         <input type="range" id="tune-falloff" min="0.1" max="1.5" step="0.05" value="0.35" aria-label="heatmap falloff in metres">
         <output id="tune-falloff-out">0.35</output>
       </div>
+      <p class="hint">Falloff changes the back-projection only; RTI draws with its own link ellipses.</p>
       <p class="ctl-error" id="tune-error" role="alert" hidden></p>
     </div>
   </div>
 </section>
+</div>
 
 <noscript><p class="muted" style="padding:16px">This page needs JavaScript to draw the room map.</p></noscript>
 
@@ -305,25 +782,26 @@
 
   var WINDOW_S = 30;            // sparkline history, in packet time
   var FULL_SCALE = 2;           // bars and sparklines run to this multiple of the threshold; the mark is at 1
-  var LOSS_WARN = 0.10;         // link health: a sender losing more than this share of its packets is flagged
-  var CLIP_WARN = 0.05;         // ... and a link with more than this share of clipped samples
-  var BUSY_COLOUR = "#e3a008";  // the near-node veto: a ring round the node and a line in its label
-  var TRACK_COLOUR = "#4de8ff"; // the person track (payload.track, csi/tracker.py): cyan, apart from heat and links
-  var LOST_COLOUR = "#e8edf3";  // its 'last seen' marker
   var TRAIL_FADE_S = 20;        // the trail fades out over this many seconds (the tracker keeps 20 s)
   var COASTING_S = 0.5;         // an active track unmeasured for longer than this is coasting: dashed ellipse
-  var STATES = ["EMPTY", "MOTION", "NO_SIGNAL", "UNCALIBRATED", "WARMUP"];
-  var COLOR = {
-    EMPTY: "#3fb950", MOTION: "#f85149", NO_SIGNAL: "#8b949e", UNCALIBRATED: "#e3a008", WARMUP: "#7d9ab5"
+  var STATES = ["MOTION", "EMPTY", "WARMUP", "UNCALIBRATED", "NO_SIGNAL"];
+  var STATE_TEXT = {
+    MOTION: "MOTION", EMPTY: "EMPTY", WARMUP: "WARMUP", UNCALIBRATED: "UNCALIBRATED", NO_SIGNAL: "NO SIGNAL"
   };
-  // Inferno-like ramp: cold (dark, transparent) to hot (pale yellow).
-  var RAMP = [[0, 0, 4], [87, 16, 110], [188, 55, 84], [249, 142, 9], [252, 255, 164]];
+  // Heat ramps, cold (transparent) to hot: inferno-like on the dark floor, yellow-orange-red on the light one.
+  // The legend's --heat-ramp gradients use the same stops.
+  var RAMP_DARK = [[0, 0, 4], [87, 16, 110], [188, 55, 84], [249, 142, 9], [252, 255, 164]];
+  var RAMP_LIGHT = [[255, 237, 160], [254, 178, 76], [240, 59, 32], [189, 0, 38], [110, 0, 30]];
   var MAP_PAD = { left: 46, right: 14, top: 14, bottom: 44 };
-  var MAP_MAX_H = 560;          // css px: keeps the whole map on one laptop screen
+  var MAP_MAX_H = 560;          // css px: the map's height limit when the window height is unknown
+  var PUCK_R = 12;              // css px: a puck is a circle of this radius (1.25 x in the demo view)
+  var COV_PX = 8;               // coverage image pixels per cell side, for its hatching
   var RETRY_MIN_MS = 500;
   var RETRY_MAX_MS = 8000;
-  var FONT = "600 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
-  var TICK_FONT = "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+  var STALE_MS = 3000;          // connected, but no frame for this long (they come at 5 Hz): the strip says so
+  var FONT_FAMILY = "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+  var THEME_KEY = "csi-dashboard-theme";
+  var SORT_KEY = "csi-dashboard-sort";
 
   function $(id) { return document.getElementById(id); }
   function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
@@ -347,18 +825,110 @@
     return node;
   }
   function clearChildren(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+  // The rows are updated five times a second: write a node's text, class or attribute only when it changes.
+  function setText(node, text) {
+    text = String(text);
+    if (node._text !== text) { node._text = text; node.textContent = text; }
+  }
+  function setClass(node, cls) {
+    if (node._cls !== cls) { node._cls = cls; node.className = cls; }
+  }
+  function setAttr(node, name, value) {
+    var key = "_attr_" + name;
+    if (node[key] !== value) { node[key] = value; node.setAttribute(name, value); }
+  }
+  function nameSet(list) {
+    var set = Object.create(null);
+    (Array.isArray(list) ? list : []).forEach(function (name) { set[name] = true; });
+    return set;
+  }
+  // per-viewer conveniences (theme, sort); storage may be missing or refused, and the page works without it
+  function load(key) {
+    try { return window.localStorage ? window.localStorage.getItem(key) : null; } catch (err) { return null; }
+  }
+  function store(key, value) {
+    try { if (window.localStorage) window.localStorage.setItem(key, value); } catch (err) { /* refused */ }
+  }
+  function prefers(query) {
+    try { return !!(window.matchMedia && window.matchMedia(query).matches); } catch (err) { return false; }
+  }
+
+  // ------------------------------------------------------------------ theme
+
+  // The map's colours come from the CSS custom properties above, read again when the theme changes. Without a
+  // style engine (the tests' DOM stub) the dark values below are used.
+  var PAL_VARS = {
+    theme: "--theme", floor: "--map-floor", grid: "--map-grid", wall: "--map-wall", outline: "--map-outline",
+    tick: "--map-tick", label: "--map-label", outside: "--map-outside", text: "--text", muted: "--muted",
+    accent: "--accent", puck: "--puck", puckEdge: "--puck-edge", rx: "--rx", tx: "--tx", track: "--track",
+    trackFill: "--track-fill", lost: "--lost", busy: "--busy", support: "--support", blind: "--blind",
+    MOTION: "--s-motion", EMPTY: "--s-empty", WARMUP: "--s-warmup", UNCALIBRATED: "--s-uncal",
+    NO_SIGNAL: "--s-nosig", good: "--h-good", warn: "--h-warn", fail: "--h-fail", unknown: "--h-unknown"
+  };
+  var PAL_DARK = {
+    theme: "dark", floor: "#05080c", grid: "rgba(150, 165, 180, 0.13)", wall: "#8b98a5", outline: "#d0d8e0",
+    tick: "#8d9aa7", label: "rgba(5, 8, 12, 0.86)", outside: "rgba(139, 148, 158, 0.18)", text: "#e6edf3",
+    muted: "#8796a6", accent: "#6ea8ff", puck: "#101820", puckEdge: "#3d4d60", rx: "#e6edf3", tx: "#58a6ff",
+    track: "#3ee6ff", trackFill: "rgba(62, 230, 255, 0.14)", lost: "#e6edf3", busy: "#f0b429",
+    support: "#ff9e8f", blind: "#a5b4ff", MOTION: "#ff5a4f", EMPTY: "#3fb950", WARMUP: "#7f9bb8",
+    UNCALIBRATED: "#e3a008", NO_SIGNAL: "#8b949e", good: "#3fb950", warn: "#e3a008", fail: "#f85149",
+    unknown: "#6e7b88"
+  };
+  var PAL = PAL_DARK, RAMP = RAMP_DARK, BLIND_RGB = [165, 180, 255];
+  var rootEl = document.documentElement || null;
+
+  function hexRgb(text) {
+    var m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(text || "").trim());
+    if (!m) return null;
+    var h = m[1].length === 3 ? m[1].replace(/./g, "$&$&") : m[1];
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  function readPalette() {
+    var cs = null;
+    try {
+      if (rootEl && typeof getComputedStyle === "function") cs = getComputedStyle(rootEl);
+    } catch (err) { cs = null; }
+    var pal = {};
+    Object.keys(PAL_VARS).forEach(function (key) {
+      var v = cs ? String(cs.getPropertyValue(PAL_VARS[key]) || "").trim() : "";
+      pal[key] = v || PAL_DARK[key];
+    });
+    PAL = pal;
+    RAMP = pal.theme === "light" ? RAMP_LIGHT : RAMP_DARK;
+    BLIND_RGB = hexRgb(pal.blind) || [165, 180, 255];
+  }
+  // the theme on screen: the explicit data-theme on <html>, else the system's
+  function activeTheme() {
+    var t = rootEl && rootEl.getAttribute ? rootEl.getAttribute("data-theme") : null;
+    return t === "light" || t === "dark" ? t : (prefers("(prefers-color-scheme: light)") ? "light" : "dark");
+  }
+
+  // ------------------------------------------------------------------ page state
 
   var els = {
-    connDot: $("conn-dot"), connText: $("conn-text"), pause: $("pause"), pausedFlag: $("paused-flag"),
-    receivers: $("receivers"), counts: $("link-counts"), calib: $("calib"), packet: $("pkt-time"),
-    messages: $("messages"), map: $("map"), mapCard: $("map-card"), links: $("links"),
-    caption: $("map-caption"), busy: $("busy-note"), lastMotion: $("last-motion"),
-    track: $("track-note"), trackShow: $("track-show")
+    app: $("app"), connDot: $("conn-dot"), connText: $("conn-text"), replay: $("replay-chip"),
+    pill: $("room-pill"), roomState: $("room-state"), roomReason: $("room-reason"), announce: $("room-announce"),
+    lastMotion: $("last-motion"), agree: $("agree"), estimator: $("estimator"), receivers: $("receivers"),
+    packet: $("pkt-time"), calib: $("calib"), calLive: $("cal-live"), pausedFlag: $("paused-flag"),
+    pause: $("pause"), demo: $("demo"), drawerToggle: $("drawer-toggle"), theme: $("theme"),
+    msgbar: $("msgbar"), messages: $("messages"),
+    mapCard: $("map-card"), map: $("map"), caption: $("map-caption"), busy: $("busy-note"), track: $("track-note"),
+    coverage: $("coverage-note"), heatPeak: $("heat-peak"),
+    counts: $("link-counts"), sortAttention: $("sort-attention"), sortName: $("sort-name"), links: $("links"),
+    pucks: $("pucks"), pucksSummary: $("pucks-summary"), controls: $("controls"), drawerClose: $("drawer-close")
   };
+  var LAYER_INPUTS = { heat: "layer-heat", links: "layer-links", track: "track-show", coverage: "layer-coverage" };
   var ctx = els.map.getContext("2d");
   var heatCanvas = document.createElement("canvas");
   var heatCtx = heatCanvas.getContext("2d");
+  var heatImg = null;
+  var covCanvas = document.createElement("canvas");
+  var covCtx = covCanvas.getContext("2d");
+  var covKey = null;            // what the coverage image on covCanvas was drawn from
   var view = null;              // the map layout of the frame on screen (sizeMap), for clamping labels
+  var sized = { w: 0, h: 0, dpr: 0 };
+  var labelFont = "", smallFont = "";
+  var hits = [];                // the pucks and links on screen, for clicks on the map
 
   var shown = null;             // payload on screen
   var latest = null;            // newest payload received; kept while paused, shown on resume
@@ -368,107 +938,24 @@
   var source = null;            // the EventSource, or null
   var retryMs = RETRY_MIN_MS;
   var retryTimer = null;
+  var staleTimer = null;
+  var stale = false;            // connected, but the frames stopped
+  var conn = "connecting";
   var history = {};             // link id -> [[packet time, normalised or null], ...] for the last WINDOW_S
   var lastTime = null;
   var rows = {};                // link id -> DOM row, built once and updated per payload
-
-  // ------------------------------------------------------------------ connection and data
-
-  function setConn(state) {
-    var text = { connecting: "connecting", live: "live", reconnecting: "reconnecting", finished: "run finished" };
-    els.connText.textContent = text[state] || state;
-    els.connDot.className = "dot " + state;
-  }
-
-  function recordHistory(p) {
-    var t = p.status.time_s;
-    if (lastTime !== null && t < lastTime - 1) history = {};   // a new server run: start the sparklines again
-    lastTime = t;
-    p.links.forEach(function (row) {
-      var list = history[row.id] || (history[row.id] = []);
-      list.push([t, row.normalised]);
-      while (list.length && list[0][0] < t - WINDOW_S) list.shift();
-    });
-  }
-
-  function ingest(p) {
-    if (!p || !p.status || !p.links) return;
-    recordHistory(p);
-    latest = p;
-    // the count follows the payload, so a room with more links reads right
-    els.caption.textContent = mapCaption(p);
-    // A finished run must not reconnect: the server would replay the run from its log.
-    if (p.status.finished) {
-      finished = true;
-      if (source) { source.close(); source = null; }
-      clearTimeout(retryTimer);
-      setConn("finished");
-    }
-    if (paused) {
-      missed += 1;
-      els.pausedFlag.textContent = "PAUSED, " + missed + " newer";
-      return;
-    }
-    render(p);
-  }
-
-  function openStream() {
-    if (finished) return;
-    var s = new EventSource("/api/events");
-    source = s;
-    s.onopen = function () {
-      retryMs = RETRY_MIN_MS;
-      if (!finished) setConn("live");
-    };
-    s.onmessage = function (ev) {
-      if (finished || source !== s) return;
-      var p;
-      try { p = JSON.parse(ev.data); } catch (err) { return; }
-      setConn("live");
-      ingest(p);
-    };
-    s.onerror = function () {
-      if (finished || source !== s) return;
-      s.close();
-      source = null;
-      setConn("reconnecting");
-      clearTimeout(retryTimer);
-      retryTimer = setTimeout(openStream, retryMs);
-      retryMs = Math.min(retryMs * 2, RETRY_MAX_MS);
-    };
-  }
-
-  function start() {
-    setConn("connecting");
-    fetch("/api/state", { cache: "no-store" })
-      .then(function (res) { return res.json(); })
-      .then(ingest)
-      .catch(function () { /* the stream below retries */ })
-      .then(function () { if (!finished && !source) openStream(); });
-  }
-
-  // ------------------------------------------------------------------ pause
-
-  els.pause.addEventListener("click", function () {
-    paused = !paused;
-    els.pause.textContent = paused ? "Resume" : "Pause";
-    els.pause.setAttribute("aria-pressed", String(paused));
-    els.pausedFlag.hidden = !paused;
-    els.pausedFlag.textContent = "PAUSED";
-    els.mapCard.classList.toggle("paused", paused);
-    missed = 0;
-    if (!paused && latest) render(latest);   // resume jumps to the latest payload
-  });
-
-  // ------------------------------------------------------------------ map
-
-  function rampColor(v) {
-    var pos = v * (RAMP.length - 1);
-    var i = Math.min(Math.floor(pos), RAMP.length - 2);
-    var f = pos - i;
-    var a = RAMP[i], b = RAMP[i + 1];
-    return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
-  }
+  var rowOrder = null;          // the order the link rows are in on the page
+  var puckRows = {};            // node name -> DOM row
+  var puckOrder = null;
+  var known = { room: null, nodes: [] };   // the last room and nodes, for a frame without them
+  var coverage = { key: null };
+  var layers = { heat: true, links: true, track: true, coverage: false };
+  var demo = false;
+  var drawerOpen = false;
+  var sortMode = "attention";
+  var sel = null;               // the selected link or puck, {kind: "link" | "puck", id}, or null
+  var hover = null;             // the link or puck under the pointer in the side panel
+  var lastRoomKey = null;
 
   // ---- geometry: pure (tested with node) begin
   // The room's footprint (payload room.footprint: its real outline, [[x, y], ...] in metres) as points, or null
@@ -530,6 +1017,291 @@
   }
   // ---- track: pure (tested with node) end
 
+  // ---- coverage: pure (tested with node) begin
+  // Blind spots for placing pucks, by the rule of scripts/plan_layout.py: a link covers a cell when the cell's
+  // centre lies within 0.6 m + 5% of the link's length of its line, between its two ends (no end caps), and a cell
+  // that fewer than 3 links cover is blind: placing a person needs three crossing links. Two links between the
+  // same two pucks share one path and count once, and a link with weight 0 is left out, as in the planner. The
+  // cells are the heatmap's (row-major, row 0 at y = 0); a cell whose centre is outside the footprint is null.
+  var COVERAGE_BAND_M = 0.6, COVERAGE_BAND_PER_M = 0.05, COVERAGE_MIN_LINKS = 3;
+  function coveragePaths(nodes, links) {
+    var at = {}, seen = {}, out = [];
+    (nodes || []).forEach(function (n) {
+      if (n && Number.isFinite(n.x) && Number.isFinite(n.y)) at[n.name] = n;
+    });
+    (links || []).forEach(function (row) {
+      var a = at[row.receiver], b = at[row.sender];
+      if (!a || !b || row.weight === 0) return;
+      var key = [a.name, b.name].sort().join("\n");
+      var length = Math.sqrt((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y));
+      if (seen[key] || length < 1e-6) return;
+      seen[key] = true;
+      out.push({ ax: a.x, ay: a.y, bx: b.x, by: b.y, half: COVERAGE_BAND_M + COVERAGE_BAND_PER_M * length });
+    });
+    return out;
+  }
+  // inside the polygon or on its boundary (even-odd rule), as in the planner
+  function insidePolygon(x, y, pts) {
+    var inside = false;
+    for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      var a = pts[j], b = pts[i];
+      var dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+      var t = l2 > 0 ? clampUnit(((x - a.x) * dx + (y - a.y) * dy) / l2) : 0;
+      var ex = a.x + t * dx - x, ey = a.y + t * dy - y;
+      if (ex * ex + ey * ey <= 1e-18) return true;
+      if ((a.y > y) !== (b.y > y) && x < a.x + (y - a.y) * (b.x - a.x) / (b.y - a.y)) inside = !inside;
+    }
+    return inside;
+  }
+  function clampUnit(t) { return t < 0 ? 0 : t > 1 ? 1 : t; }
+  function coverageCounts(room, outline, paths, cols, rows) {
+    var counts = [], w = room.width_m / cols, h = room.depth_m / rows;
+    for (var r = 0; r < rows; r++) {
+      var y = (r + 0.5) * h;
+      for (var c = 0; c < cols; c++) {
+        var x = (c + 0.5) * w;
+        if (outline && !insidePolygon(x, y, outline)) { counts.push(null); continue; }
+        var n = 0;
+        for (var k = 0; k < paths.length; k++) {
+          var p = paths[k], dx = p.bx - p.ax, dy = p.by - p.ay, px = x - p.ax, py = y - p.ay;
+          var l2 = dx * dx + dy * dy, dot = px * dx + py * dy;
+          if (dot >= 0 && dot <= l2 && Math.abs(px * dy - py * dx) <= p.half * Math.sqrt(l2) + 1e-9) n++;
+        }
+        counts.push(n);
+      }
+    }
+    return counts;
+  }
+  // cells inside the room, the blind ones among them (fewer than minLinks links) and those no link covers
+  function coverageSummary(counts, minLinks) {
+    var s = { cells: 0, blind: 0, none: 0 };
+    counts.forEach(function (n) {
+      if (n == null) return;
+      s.cells++;
+      if (n < minLinks) s.blind++;
+      if (n === 0) s.none++;
+    });
+    return s;
+  }
+  // ---- coverage: pure (tested with node) end
+
+  // ---- health: pure (tested with node) begin
+  // Link and puck health from the link rows (csi/links.py, csi/health.py). A link fails when it is NO_SIGNAL (no
+  // packet for 2 s). It needs a look when its sender loses more than 10% of its packets (seq_loss), its signal is
+  // below -70 dBm, more than 5% of its samples clip, or fewer than 10 packets/s arrive (csi/detect.py will not
+  // calibrate a link that sparse). A puck fails when all its links fail (or its receiver's port failed), is good
+  // when all are good, and needs a look otherwise.
+  var LOSS_WARN = 0.10, CLIP_WARN = 0.05, RSSI_WARN = -70, RATE_WARN = 10;
+  function linkIssues(row) {
+    if (row.state === "NO_SIGNAL") return ["no signal"];
+    var out = [];
+    if (row.seq_loss != null && row.seq_loss > LOSS_WARN) out.push("packet loss");
+    if (row.rssi != null && row.rssi < RSSI_WARN) out.push("weak signal");
+    if (row.clip_pct != null && row.clip_pct > CLIP_WARN) out.push("clipping");
+    if (row.pkt_rate != null && row.pkt_rate < RATE_WARN) out.push("few packets");
+    return out;
+  }
+  function linkHealth(row) {
+    if (row.state === "NO_SIGNAL") return "fail";
+    return linkIssues(row).length ? "warn" : "good";
+  }
+  function puckHealth(name, links, port) {
+    var mine = (links || []).filter(function (l) { return l.receiver === name || l.sender === name; });
+    var good = 0, failing = 0;
+    mine.forEach(function (l) {
+      var h = linkHealth(l);
+      if (h === "good") good++;
+      else if (h === "fail") failing++;
+    });
+    var level = port === "failed" ? "fail" : !mine.length ? "unknown"
+      : failing === mine.length ? "fail" : good === mine.length ? "good" : "warn";
+    return { level: level, healthy: good, total: mine.length };
+  }
+  // attention order of the links panel: MOTION, then failing, then links that need a look, then the rest
+  var ATTENTION = { MOTION: 0, NO_SIGNAL: 1, UNCALIBRATED: 3, WARMUP: 4, EMPTY: 5 };
+  function attentionRank(row) {
+    var rank = Object.prototype.hasOwnProperty.call(ATTENTION, row.state) ? ATTENTION[row.state] : 2;
+    return rank > 2 && linkIssues(row).length ? 2 : rank;
+  }
+  function sortedLinkIds(links, mode) {
+    return (links || []).slice().sort(function (a, b) {
+      var d = mode === "attention" ? attentionRank(a) - attentionRank(b) : 0;
+      return d || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    }).map(function (l) { return l.id; });
+  }
+  // ---- health: pure (tested with node) end
+
+  // ---- room state: pure (tested with node) begin
+  // The room pill: MOTION, CLEAR, LEARNING, UNCALIBRATED or NO DATA, with a reason in words, from the room decision
+  // (status.room, csi/adaptive.py RoomDecision: state MOTION, EMPTY or WARMUP and a one-word reason) and the link
+  // states. A log written before the room decision has no status.room: the pill then follows the link states,
+  // MOTION when any link is in MOTION (a missed person costs more than a false alarm).
+  var CLEAR_REASON = {
+    quiet: "no link raised", diversity: "raised links share one puck", spatial: "raised links do not cross",
+    entering: "links agree: confirming"
+  };
+  var OLD_LOG = " (no room decision in this log)";
+  function plural(n, word) { return n + " " + word + (n === 1 ? "" : "s"); }
+  function roomView(p) {
+    var nodata = { key: "nodata", label: "NO DATA", detail: "waiting for the server" };
+    var learning = { key: "learning", label: "LEARNING", detail: "links are learning their quiet level" };
+    var uncal = { key: "uncal", label: "UNCALIBRATED", detail: "no link has a threshold: calibrate on an empty room" };
+    if (!p || !p.status) return nodata;
+    var links = Array.isArray(p.links) ? p.links : [];
+    var heard = links.filter(function (l) { return l.state !== "NO_SIGNAL"; });
+    if (!heard.length) {
+      nodata.detail = links.length ? "no packets from any link" : "no links in this frame";
+      return nodata;
+    }
+    var partial = heard.length < links.length ? "; " + heard.length + " of " + links.length + " links heard" : "";
+    var allUncal = heard.every(function (l) { return l.state === "UNCALIBRATED"; });
+    var room = p.status.room && typeof p.status.room === "object" ? p.status.room : null;
+    var state = room && typeof room.state === "string" ? room.state : null;
+    var raised = room && Array.isArray(room.elevated) ? room.elevated.length : 0;
+    if (state === "MOTION") {
+      var sp = room.room_support;
+      var detail = room.reason === "strong" ? "one link strongly raised"
+        : room.reason === "hold" ? "holding: movement just stopped"
+        : plural(raised, "link") + (raised === 1 ? " raised" : " agree");
+      if (sp && Number.isFinite(sp.x) && Number.isFinite(sp.y) && room.reason !== "hold") {
+        detail += " near (" + sp.x.toFixed(2) + ", " + sp.y.toFixed(2) + ") m";
+      }
+      return { key: "motion", label: "MOTION", detail: detail + partial };
+    }
+    if (state === "EMPTY") {
+      var why = room.reason === "too_few" && room.required != null ? raised + " raised, " + room.required + " needed"
+        : CLEAR_REASON[room.reason] || "no agreement";
+      return { key: "clear", label: "CLEAR", detail: why + partial };
+    }
+    if (state === "WARMUP") {
+      if (allUncal) return uncal;
+      learning.detail += partial;
+      return learning;
+    }
+    var moving = links.filter(function (l) { return l.state === "MOTION"; }).length;
+    if (moving) return { key: "motion", label: "MOTION", detail: plural(moving, "link") + " in MOTION" + OLD_LOG };
+    if (heard.some(function (l) { return l.state === "EMPTY"; })) {
+      return { key: "clear", label: "CLEAR", detail: "no link in MOTION" + OLD_LOG };
+    }
+    return allUncal ? uncal : learning;
+  }
+  // ---- room state: pure (tested with node) end
+
+  // ------------------------------------------------------------------ connection and data
+
+  function setConn(state) {
+    var text = { connecting: "connecting", live: "live", reconnecting: "reconnecting", finished: "run finished" };
+    conn = state;
+    var late = state === "live" && stale;
+    setText(els.connText, (text[state] || state) + (late ? ", no new frames" : ""));
+    setClass(els.connDot, "dot " + (late ? "stale" : state));
+  }
+
+  // connected but silent: the server stopped sending frames, so what is on screen is old
+  function noteFrame() {
+    if (stale) { stale = false; setConn(conn); }
+    clearTimeout(staleTimer);
+    if (!finished) {
+      staleTimer = setTimeout(function () { stale = true; setConn(conn); }, STALE_MS);
+    }
+  }
+
+  function recordHistory(p) {
+    var t = p.status.time_s;
+    if (lastTime !== null && t < lastTime - 1) history = {};   // a new server run: start the sparklines again
+    lastTime = t;
+    p.links.forEach(function (row) {
+      var list = history[row.id] || (history[row.id] = []);
+      list.push([t, row.normalised]);
+      while (list.length && list[0][0] < t - WINDOW_S) list.shift();
+    });
+  }
+
+  function ingest(p) {
+    if (!p || !p.status || !p.links) return;
+    recordHistory(p);
+    latest = p;
+    // the count follows the payload, so a room with more links reads right
+    els.caption.textContent = mapCaption(p);
+    // A finished run must not reconnect: the server would replay the run from its log.
+    if (p.status.finished) {
+      finished = true;
+      if (source) { source.close(); source = null; }
+      clearTimeout(retryTimer);
+      setConn("finished");
+    }
+    noteFrame();
+    if (paused) {
+      missed += 1;
+      els.pausedFlag.textContent = "PAUSED, " + missed + " newer";
+      return;
+    }
+    render(p);
+  }
+
+  function openStream() {
+    if (finished) return;
+    var s = new EventSource("/api/events");
+    source = s;
+    s.onopen = function () {
+      retryMs = RETRY_MIN_MS;
+      if (!finished) setConn("live");
+    };
+    s.onmessage = function (ev) {
+      if (finished || source !== s) return;
+      var p;
+      try { p = JSON.parse(ev.data); } catch (err) { return; }
+      setConn("live");
+      ingest(p);
+    };
+    s.onerror = function () {
+      if (finished || source !== s) return;
+      s.close();
+      source = null;
+      setConn("reconnecting");
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(openStream, retryMs);
+      retryMs = Math.min(retryMs * 2, RETRY_MAX_MS);
+    };
+  }
+
+  function start() {
+    setConn("connecting");
+    fetch("/api/state", { cache: "no-store" })
+      .then(function (res) { return res.json(); })
+      .then(ingest)
+      .catch(function () { /* the stream below retries */ })
+      .then(function () { if (!finished && !source) openStream(); });
+  }
+
+  // A frame without room or nodes (the server's last frame after a pipeline failure has neither) keeps the last
+  // known ones on the map, so the error shows over the room instead of blanking it; without those, the room is
+  // the heatmap's extents.
+  function withGeometry(p) {
+    var hasRoom = p.room && p.room.width_m > 0 && p.room.depth_m > 0;
+    if (hasRoom && Array.isArray(p.nodes)) {
+      known = { room: p.room, nodes: p.nodes };
+      return p;
+    }
+    var ext = p.heatmap && p.heatmap.extents;
+    var fromHeat = ext && ext.x_max > 0 && ext.y_max > 0 ? { width_m: ext.x_max, depth_m: ext.y_max } : null;
+    var copy = {};
+    Object.keys(p).forEach(function (k) { copy[k] = p[k]; });
+    copy.room = hasRoom ? p.room : known.room || fromHeat;
+    copy.nodes = Array.isArray(p.nodes) ? p.nodes : known.nodes;
+    return copy;
+  }
+
+  // ------------------------------------------------------------------ map
+
+  function rampColor(v) {
+    var pos = v * (RAMP.length - 1);
+    var i = Math.min(Math.floor(pos), RAMP.length - 2);
+    var f = pos - i;
+    var a = RAMP[i], b = RAMP[i + 1];
+    return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+  }
+
   // The caption under the map: how many links drew it and with which estimator (heatmap.estimator: "rti" or
   // "backprojection", csi/heatmap.py). A log written before the RTI estimator has none and names no estimator.
   function mapCaption(p) {
@@ -539,28 +1311,46 @@
       ".";
   }
 
-  // room x, y in metres -> css px; the frame b sets the scale and the offset, the room sits inside it
+  function mapScale() { return demo ? 1.25 : 1; }
+  function setFonts() {
+    var k = mapScale();
+    labelFont = "650 " + Math.round(13 * k) + "px " + FONT_FAMILY;
+    smallFont = "500 " + Math.round(12 * k) + "px " + FONT_FAMILY;
+  }
+  // the tallest the map may be: most of the window (more of it in the demo view)
+  function mapMaxHeight() {
+    var vh = window.innerHeight;
+    if (!vh) return MAP_MAX_H;
+    return demo ? Math.max(360, vh - 190) : Math.max(320, Math.min(860, vh - 230));
+  }
+
+  // room x, y in metres -> css px; the frame b sets the scale and the offset, the room sits inside it. The canvas
+  // is only resized when its size changes; the frame is centred when the height limits it.
   function sizeMap(room, b) {
     var spanW = b.x1 - b.x0, spanH = b.y1 - b.y0;
-    var cssW = els.map.clientWidth || 300;
+    var cssW = Math.round(els.map.clientWidth || 300);
     var dpr = window.devicePixelRatio || 1;
     var availW = cssW - MAP_PAD.left - MAP_PAD.right;
-    var maxW = (MAP_MAX_H - MAP_PAD.top - MAP_PAD.bottom) * spanW / spanH;
+    var maxW = (mapMaxHeight() - MAP_PAD.top - MAP_PAD.bottom) * spanW / spanH;
     var fw = Math.max(50, Math.min(availW, maxW));
     var fh = fw * spanH / spanW;
     var cssH = Math.round(fh + MAP_PAD.top + MAP_PAD.bottom);
-    var cssWFinal = Math.round(cssW);
-    els.map.style.height = cssH + "px";
-    els.map.width = Math.round(cssWFinal * dpr);
-    els.map.height = Math.round(cssH * dpr);
+    var left = MAP_PAD.left + Math.max(0, (availW - fw) / 2);
+    if (sized.w !== cssW || sized.h !== cssH || sized.dpr !== dpr) {
+      sized = { w: cssW, h: cssH, dpr: dpr };
+      els.map.style.height = cssH + "px";
+      els.map.width = Math.round(cssW * dpr);
+      els.map.height = Math.round(cssH * dpr);
+    }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalAlpha = 1;
     var s = fw / spanW;
     return {
-      W: cssWFinal, H: cssH, s: s, b: b,
-      rx0: MAP_PAD.left + (0 - b.x0) * s, ry0: MAP_PAD.top + (0 - b.y0) * s,   // room rectangle, in css px
+      W: cssW, H: cssH, s: s, b: b,
+      rx0: left + (0 - b.x0) * s, ry0: MAP_PAD.top + (0 - b.y0) * s,   // room rectangle, in css px
       rw: room.width_m * s, rh: room.depth_m * s,
       outline: footprintPoints(room),   // the room's footprint, or null: heat is clipped to it and it is drawn
-      X: function (x) { return MAP_PAD.left + (x - b.x0) * s; },
+      X: function (x) { return left + (x - b.x0) * s; },
       Y: function (y) { return MAP_PAD.top + (y - b.y0) * s; }
     };
   }
@@ -574,19 +1364,22 @@
   }
 
   function drawHeat(hm, g) {
-    if (!hm || !hm.cells || !hm.cells.length) return;
-    heatCanvas.width = hm.cols;
-    heatCanvas.height = hm.rows;
-    var img = heatCtx.createImageData(hm.cols, hm.rows);
-    for (var i = 0; i < hm.cells.length; i++) {
+    if (!hm || !hm.cells || !hm.cells.length || !(hm.cols > 0) || !(hm.rows > 0)) return;
+    if (!heatImg || heatCanvas.width !== hm.cols || heatCanvas.height !== hm.rows) {
+      heatCanvas.width = hm.cols;
+      heatCanvas.height = hm.rows;
+      heatImg = heatCtx.createImageData(hm.cols, hm.rows);
+    }
+    var data = heatImg.data;
+    for (var i = 0; i < hm.cols * hm.rows; i++) {
       var v = clamp(hm.cells[i] || 0, 0, 1);
       var c = rampColor(v);
-      img.data[i * 4] = c[0];
-      img.data[i * 4 + 1] = c[1];
-      img.data[i * 4 + 2] = c[2];
-      img.data[i * 4 + 3] = Math.round(255 * 0.92 * clamp(v * 2.2, 0, 1));
+      data[i * 4] = c[0];
+      data[i * 4 + 1] = c[1];
+      data[i * 4 + 2] = c[2];
+      data[i * 4 + 3] = Math.round(255 * 0.92 * clamp(v * 2.2, 0, 1));
     }
-    heatCtx.putImageData(img, 0, 0);
+    heatCtx.putImageData(heatImg, 0, 0);
     ctx.save();
     if (g.outline) {   // a room with a footprint: no heat outside it, not even the smoothing's bleed at its edge
       ctx.beginPath();
@@ -599,202 +1392,278 @@
     ctx.restore();
   }
 
-  function labelBlock(lines, x, y, hAlign, vAlign, colour) {
-    ctx.save();
-    ctx.font = FONT;
-    ctx.textBaseline = "top";
-    var lineH = 16, pad = 5;
-    var w = 0;
-    lines.forEach(function (line) { w = Math.max(w, ctx.measureText(line.text).width); });
-    var h = lines.length * lineH + pad * 2 - 2;
-    var bx = hAlign === "left" ? x : hAlign === "right" ? x - w - pad * 2 : x - (w + pad * 2) / 2;
-    var by = vAlign === "top" ? y : vAlign === "bottom" ? y - h : y - h / 2;
-    if (view) {   // keep the label on the canvas, whatever side it was put on
-      bx = clamp(bx, 2, Math.max(2, view.W - w - pad * 2 - 2));
-      by = clamp(by, 2, Math.max(2, view.H - h - 2));
+  // the coverage for this payload's geometry, computed once per change of pucks, links or grid
+  function coverageFor(p) {
+    var hm = p.heatmap || {};
+    var cols = hm.cols > 0 ? hm.cols : 28, rows = hm.rows > 0 ? hm.rows : 18;
+    var outline = footprintPoints(p.room);
+    var paths = coveragePaths(p.nodes, p.links);
+    var key = JSON.stringify([p.room.width_m, p.room.depth_m, outline, paths, cols, rows]);
+    if (coverage.key !== key) {
+      var counts = coverageCounts(p.room, outline, paths, cols, rows);
+      coverage = { key: key, cols: cols, rows: rows, counts: counts,
+                   summary: coverageSummary(counts, COVERAGE_MIN_LINKS) };
     }
-    ctx.fillStyle = "rgba(7, 10, 15, 0.82)";
-    ctx.fillRect(bx, by, w + pad * 2, h);
-    lines.forEach(function (line, i) {
-      ctx.fillStyle = line.colour || colour || "#e8edf3";
-      ctx.font = line.font || FONT;
-      ctx.fillText(line.text, bx + pad, by + pad + i * lineH - 2);
-    });
+    return coverage;
+  }
+
+  // blind cells hatched: lightly where 1 or 2 links pass, densely where none does; crisp cell edges
+  function drawCoverage(cov, g) {
+    var key = cov.key + "|" + BLIND_RGB.join(",");
+    if (covKey !== key) {
+      covKey = key;
+      var w = cov.cols * COV_PX, h = cov.rows * COV_PX;
+      covCanvas.width = w;
+      covCanvas.height = h;
+      var img = covCtx.createImageData(w, h), data = img.data;
+      for (var py = 0; py < h; py++) {
+        for (var px = 0; px < w; px++) {
+          var n = cov.counts[Math.floor(py / COV_PX) * cov.cols + Math.floor(px / COV_PX)];
+          if (n == null || n >= COVERAGE_MIN_LINKS) continue;
+          var stripe = (px + py) % 6 < 2;
+          var alpha = n === 0 ? (stripe ? 0.62 : 0.2) : (stripe ? 0.45 : 0.06);
+          var o = (py * w + px) * 4;
+          data[o] = BLIND_RGB[0];
+          data[o + 1] = BLIND_RGB[1];
+          data[o + 2] = BLIND_RGB[2];
+          data[o + 3] = Math.round(255 * alpha);
+        }
+      }
+      covCtx.putImageData(img, 0, 0);
+    }
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(covCanvas, g.rx0, g.ry0, g.rw, g.rh);
     ctx.restore();
   }
 
-  function drawMap(p) {
-    var room = p.room;
-    var frame = mapBounds(room, p.nodes);
-    var g = sizeMap(room, frame);
-    view = g;
-    var X = g.X, Y = g.Y;
-    ctx.clearRect(0, 0, g.W, g.H);
+  // grid and tick spacing: the smallest of these steps that leaves about 34 px between lines
+  function tickStep(s) {
+    var steps = [0.25, 0.5, 1, 2, 5, 10, 20];
+    for (var i = 0; i < steps.length; i++) if (steps[i] * s >= 34) return steps[i];
+    return steps[steps.length - 1];
+  }
+  function tickText(v) { return String(Math.round(v * 100) / 100); }
 
-    // room floor, then the heat (room rectangle only, and inside the footprint when the room has one), then a
-    // faint metre grid over the room
-    ctx.fillStyle = "#070a0f";
-    ctx.fillRect(g.rx0, g.ry0, g.rw, g.rh);
-    drawHeat(p.heatmap, g);
+  function drawGrid(room, g, step) {
     ctx.save();
-    ctx.strokeStyle = "rgba(154, 167, 180, 0.14)";
+    ctx.strokeStyle = PAL.grid;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    for (var gx = 0.5; gx < room.width_m; gx += 0.5) { ctx.moveTo(X(gx), Y(0)); ctx.lineTo(X(gx), Y(room.depth_m)); }
-    for (var gy = 0.5; gy < room.depth_m; gy += 0.5) { ctx.moveTo(X(0), Y(gy)); ctx.lineTo(X(room.width_m), Y(gy)); }
+    for (var i = 1; i * step < room.width_m - 1e-9; i++) {
+      ctx.moveTo(g.X(i * step), g.Y(0)); ctx.lineTo(g.X(i * step), g.Y(room.depth_m));
+    }
+    for (var j = 1; j * step < room.depth_m - 1e-9; j++) {
+      ctx.moveTo(g.X(0), g.Y(j * step)); ctx.lineTo(g.X(room.width_m), g.Y(j * step));
+    }
     ctx.stroke();
     ctx.restore();
+  }
 
-    // a room with a footprint (room.footprint): the part of the rectangle outside it is shaded, the rectangle
-    // is only the coordinate frame (thin, dashed), and the footprint is the room outline drawn over the heat
+  // A room with a footprint (room.footprint): the part of the rectangle outside it is shaded, the rectangle is
+  // only the coordinate frame (thin, dashed), and the footprint is the room outline drawn over the heat. Then the
+  // metre ticks (x along the bottom edge, y down the left edge): the room's own coordinates, 0 to width and 0 to
+  // depth, and nothing beyond the room rectangle.
+  function drawRoomFrame(room, g, step) {
+    var X = g.X, Y = g.Y;
     if (g.outline) {
       ctx.save();
-      ctx.fillStyle = "rgba(139, 148, 158, 0.16)";
+      ctx.fillStyle = PAL.outside;
       ctx.beginPath();
       ctx.rect(g.rx0, g.ry0, g.rw, g.rh);
       addOutline(g.outline, g);
       ctx.fill("evenodd");
       ctx.restore();
     }
-
-    // room outline and metre ticks (x along the bottom edge, y down the left edge); the room's own
-    // coordinates, 0 to width and 0 to depth, and nothing beyond the room rectangle
     ctx.save();
-    ctx.strokeStyle = "#8b949e";
+    ctx.strokeStyle = PAL.wall;
     ctx.lineWidth = g.outline ? 1 : 2;
     if (g.outline) ctx.setLineDash([4, 4]);
     ctx.strokeRect(g.rx0, g.ry0, g.rw, g.rh);
     ctx.setLineDash([]);
     if (g.outline) {
-      ctx.strokeStyle = "#c9d1d9";
+      ctx.strokeStyle = PAL.outline;
       ctx.lineWidth = 2.5;
       ctx.lineJoin = "round";
       ctx.beginPath();
       addOutline(g.outline, g);
       ctx.stroke();
     }
-    ctx.strokeStyle = "#9aa7b4";
+    ctx.strokeStyle = PAL.tick;
     ctx.lineWidth = 1;
-    ctx.fillStyle = "#9aa7b4";
-    ctx.font = TICK_FONT;
+    ctx.fillStyle = PAL.tick;
+    ctx.font = smallFont;
     ctx.beginPath();
-    for (var tx = 0; tx <= room.width_m + 1e-9; tx += 0.5) {
-      ctx.moveTo(X(tx), Y(room.depth_m)); ctx.lineTo(X(tx), Y(room.depth_m) + 5);
+    for (var i = 0; i * step <= room.width_m + 1e-9; i++) {
+      ctx.moveTo(X(i * step), Y(room.depth_m)); ctx.lineTo(X(i * step), Y(room.depth_m) + 5);
     }
-    for (var ty = 0; ty <= room.depth_m + 1e-9; ty += 0.5) {
-      ctx.moveTo(X(0) - 5, Y(ty)); ctx.lineTo(X(0), Y(ty));
+    for (var j = 0; j * step <= room.depth_m + 1e-9; j++) {
+      ctx.moveTo(X(0) - 5, Y(j * step)); ctx.lineTo(X(0), Y(j * step));
     }
     ctx.stroke();
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    for (var lx = 0; lx <= room.width_m + 1e-9; lx += 0.5) {
-      ctx.fillText(String(lx), X(lx), Y(room.depth_m) + 8);
+    for (i = 0; i * step <= room.width_m + 1e-9; i++) {
+      ctx.fillText(tickText(i * step), X(i * step), Y(room.depth_m) + 8);
     }
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
-    for (var ly = 0; ly <= room.depth_m + 1e-9; ly += 0.5) {
-      ctx.fillText(String(ly), X(0) - 8, Y(ly));
-    }
+    for (j = 0; j * step <= room.depth_m + 1e-9; j++) ctx.fillText(tickText(j * step), X(0) - 8, Y(j * step));
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     ctx.fillText("metres: x across, y down", g.rx0 + g.rw / 2, Y(room.depth_m) + 26);
     ctx.restore();
+  }
 
-    // links: colour by state, width and opacity by normalised score
-    var nodes = {};
-    p.nodes.forEach(function (n) { nodes[n.name] = n; });
+  function roundRectPath(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  // a block of text lines on a dark plate, kept on the canvas whatever side it was put on; border: a callout
+  function labelBlock(lines, x, y, hAlign, vAlign, colour, border) {
+    var k = mapScale(), lineH = Math.round(16 * k), pad = Math.round(5 * k);
+    ctx.save();
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    var w = 0;
+    lines.forEach(function (line) {
+      ctx.font = line.font || labelFont;
+      w = Math.max(w, ctx.measureText(line.text).width);
+    });
+    var h = lines.length * lineH + pad * 2 - 2;
+    var bx = hAlign === "left" ? x : hAlign === "right" ? x - w - pad * 2 : x - (w + pad * 2) / 2;
+    var by = vAlign === "top" ? y : vAlign === "bottom" ? y - h : y - h / 2;
+    if (view) {
+      bx = clamp(bx, 2, Math.max(2, view.W - w - pad * 2 - 2));
+      by = clamp(by, 2, Math.max(2, view.H - h - 2));
+    }
+    ctx.fillStyle = PAL.label;
+    ctx.fillRect(bx, by, w + pad * 2, h);
+    if (border) {
+      ctx.strokeStyle = border;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.rect(bx + 0.75, by + 0.75, w + pad * 2 - 1.5, h - 1.5);
+      ctx.stroke();
+    }
+    lines.forEach(function (line, i) {
+      ctx.fillStyle = line.colour || colour || PAL.text;
+      ctx.font = line.font || labelFont;
+      ctx.fillText(line.text, bx + pad, by + pad + i * lineH - 2);
+    });
+    ctx.restore();
+  }
+
+  // what the map brings forward: the hovered or selected link, or a puck and its links; null for nothing
+  function focusSet(p) {
+    var f = hover || sel;
+    if (!f) return null;
+    var out = { kind: f.kind, id: f.id, links: {}, nodes: {} };
+    if (f.kind === "puck") out.nodes[f.id] = true;
     p.links.forEach(function (row) {
-      var rx = nodes[row.receiver], tx = nodes[row.sender];
-      if (!rx || !tx) return;
-      var colour = COLOR[row.state] || COLOR.NO_SIGNAL;
-      var norm = row.normalised == null ? 0 : clamp(row.normalised / FULL_SCALE, 0, 1);
-      var x1 = X(rx.x), y1 = Y(rx.y), x2 = X(tx.x), y2 = Y(tx.y);
+      var on = f.kind === "link" ? row.id === f.id : row.receiver === f.id || row.sender === f.id;
+      if (!on) return;
+      out.links[row.id] = true;
+      out.nodes[row.receiver] = true;
+      if (row.sender) out.nodes[row.sender] = true;
+    });
+    return out;
+  }
+
+  // how strongly a link is raised, 0..1: its evidence above its quiet baseline (csi/heatmap.py), or for an old log
+  // without evidence its score against its threshold
+  function linkStrength(row) {
+    if (Number.isFinite(row.evidence)) return clamp(row.evidence, 0, 1);
+    return row.normalised == null ? 0 : clamp(row.normalised / FULL_SCALE, 0, 1);
+  }
+
+  // links: colour by state, width and opacity by evidence; dashed while they cannot be judged
+  function drawLinks(p, at, g, focus) {
+    var k = mapScale();
+    var busy = nameSet(p.heatmap && p.heatmap.busy_nodes);
+    var labelAll = p.links.length <= 8 && !demo;
+    var drawn = [];
+    p.links.forEach(function (row) {
+      var a = at[row.receiver], b = row.sender ? at[row.sender] : null;
+      if (!a || !b) return;
+      var x1 = g.X(a.x), y1 = g.Y(a.y), x2 = g.X(b.x), y2 = g.Y(b.y);
+      var colour = PAL[row.state] || PAL.NO_SIGNAL;
+      var e = linkStrength(row);
+      var width = (1.5 + 6 * e) * k, alpha = 0.35 + 0.6 * e;
+      if (row.state === "MOTION") { width = Math.max(width, 3.5 * k); alpha = Math.max(alpha, 0.9); }
+      if (row.state !== "EMPTY" && row.state !== "MOTION") alpha = 0.7;
+      if (busy[row.receiver] || busy[row.sender]) alpha *= 0.6;   // down-weighted on the map (near-node veto)
+      var on = !focus || !!focus.links[row.id];
+      if (!on) alpha *= 0.25;
       ctx.save();
-      ctx.strokeStyle = colour;
       ctx.lineCap = "round";
-      ctx.lineWidth = 2 + 6 * norm;
-      ctx.globalAlpha = row.state === "EMPTY" || row.state === "MOTION" ? 0.45 + 0.5 * norm : 0.7;
-      if (row.state === "NO_SIGNAL" || row.state === "UNCALIBRATED") ctx.setLineDash([9, 6]);
+      if (focus && on) {
+        ctx.strokeStyle = PAL.accent;
+        ctx.globalAlpha = 0.4;
+        ctx.lineWidth = width + 7 * k;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = colour;
+      ctx.lineWidth = width;
+      ctx.globalAlpha = alpha;
+      if (row.state === "NO_SIGNAL" || row.state === "UNCALIBRATED") ctx.setLineDash([9 * k, 6 * k]);
+      else if (row.state === "WARMUP") ctx.setLineDash([2 * k, 6 * k]);
       ctx.beginPath();
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
       ctx.stroke();
       ctx.restore();
-      // link id near the receiver end, where the diagonals do not cross
-      var t = 0.25;
-      labelBlock([{ text: row.id, font: FONT }], x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, "center", "middle", "#e8edf3");
+      hits.push({ kind: "link", id: row.id, x1: x1, y1: y1, x2: x2, y2: y2 });
+      if (labelAll || row.state === "MOTION" || (focus && on)) drawn.push([row, x1, y1, x2, y2, colour]);
     });
-
-    if (trackShown()) drawTrack(usableTrack(p.track), g, p.status.time_s);
-
-    // nodes: receivers are squares, senders are circles. A node outside the room (rx3 beyond the top wall)
-    // gets a dashed leader to the nearest room edge and an "outside room" line in its label. A node with
-    // movement right next to it (heatmap.busy_nodes, the near-node veto) gets a ring and an "activity near" line.
-    var busy = Object.create(null);
-    ((p.heatmap && p.heatmap.busy_nodes) || []).forEach(function (name) { busy[name] = true; });
-    p.nodes.forEach(function (n) {
-      var x = X(n.x), y = Y(n.y);
-      var outside = isOutsideRoom(n, room);
-      if (outside) {
-        var edge = leaderEnd(n, room);
-        ctx.save();
-        ctx.strokeStyle = "#9aa7b4";
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(X(edge.x), Y(edge.y));
-        ctx.stroke();
-        ctx.restore();
-      }
-      ctx.save();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "#070a0f";
-      if (n.role === "receiver") {
-        ctx.fillStyle = "#e8edf3";
-        ctx.fillRect(x - 7, y - 7, 14, 14);
-        ctx.strokeRect(x - 7, y - 7, 14, 14);
-      } else {
-        ctx.fillStyle = "#58a6ff";
-        ctx.beginPath();
-        ctx.arc(x, y, 8, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.stroke();
-      }
-      ctx.restore();
-      if (busy[n.name]) {
-        ctx.save();
-        ctx.strokeStyle = BUSY_COLOUR;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(x, y, 15, 0, 2 * Math.PI);
-        ctx.stroke();
-        ctx.restore();
-      }
-      var side = labelSide(n, frame);
-      var lines = [
-        { text: n.name + " " + n.role, font: FONT },
-        { text: n.chip, font: TICK_FONT, colour: "#9aa7b4" }
-      ];
-      if (outside) lines.push({ text: "outside room", font: TICK_FONT, colour: "#e3a008" });
-      if (busy[n.name]) lines.push({ text: "activity near " + n.name, font: TICK_FONT, colour: BUSY_COLOUR });
-      labelBlock(lines, x + side.dx, y + side.dy, side.hAlign, side.vAlign);
+    // link ids near the receiver end, where the diagonals do not cross; after every line, so none crosses a label
+    drawn.forEach(function (d) {
+      var t = 0.25;
+      labelBlock([{ text: d[0].id, font: smallFont }], d[1] + (d[3] - d[1]) * t, d[2] + (d[4] - d[2]) * t,
+        "center", "middle", PAL.text, d[0].state === "MOTION" ? d[5] : null);
     });
   }
 
-  function trackShown() { return !!els.trackShow.checked; }
+  // the point the agreeing links pass near (status.room.room_support), while the room is in MOTION
+  function drawSupport(rs, g) {
+    var sp = rs ? rs.room_support : null;
+    if (!sp || !Number.isFinite(sp.x) || !Number.isFinite(sp.y)) return;
+    var k = mapScale(), x = g.X(sp.x), y = g.Y(sp.y), a = 10 * k, gap = 4 * k;
+    ctx.save();
+    ctx.strokeStyle = PAL.support;
+    ctx.lineWidth = 2 * k;
+    ctx.beginPath();
+    ctx.moveTo(x - a, y); ctx.lineTo(x - gap, y); ctx.moveTo(x + gap, y); ctx.lineTo(x + a, y);
+    ctx.moveTo(x, y - a); ctx.lineTo(x, y - gap); ctx.moveTo(x, y + gap); ctx.lineTo(x, y + a);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, 5 * k, 0, 2 * Math.PI);
+    ctx.stroke();
+    ctx.restore();
+    labelBlock([{ text: "links agree here", font: smallFont, colour: PAL.support }], x + 10 * k, y + 8 * k,
+      "left", "top");
+  }
 
   // The person track: the trail as a polyline that fades with age, then the estimate with its 1-sigma ellipse
   // (dashed while coasting), or a 'last seen' marker with its growing uncertainty and how long ago.
   function drawTrack(tr, g, now) {
     if (!tr) return;
-    var X = g.X, Y = g.Y;
+    var X = g.X, Y = g.Y, k = mapScale();
     var trail = Array.isArray(tr.trail) ? tr.trail : [];
     ctx.save();
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.strokeStyle = tr.active ? TRACK_COLOUR : LOST_COLOUR;
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = tr.active ? PAL.track : PAL.lost;
+    ctx.lineWidth = 3 * k;
     for (var i = 1; i < trail.length; i++) {
       var a = trail[i - 1], b = trail[i];
       ctx.globalAlpha = 0.1 + 0.75 * clamp(1 - (now - b[0]) / TRAIL_FADE_S, 0, 1);
@@ -808,61 +1677,214 @@
     var x = X(tr.x), y = Y(tr.y);
     var rx = Math.max(3, e.rx * g.s), ry = Math.max(3, e.ry * g.s);
     if (tr.active) {
-      ctx.fillStyle = "rgba(77, 232, 255, 0.14)";
-      ctx.strokeStyle = TRACK_COLOUR;
-      ctx.lineWidth = 2;
+      ctx.fillStyle = PAL.trackFill;
+      ctx.strokeStyle = PAL.track;
+      ctx.lineWidth = 2 * k;
       ctx.beginPath();
       ctx.ellipse(x, y, rx, ry, e.angle, 0, 2 * Math.PI);
       ctx.fill();
       if ((tr.last_seen_s || 0) > COASTING_S) ctx.setLineDash([7, 5]);
       ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = TRACK_COLOUR;
-      ctx.strokeStyle = "#070a0f";
+      ctx.fillStyle = PAL.track;
+      ctx.strokeStyle = PAL.floor;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(x, y, 7, 0, 2 * Math.PI);
+      ctx.arc(x, y, 7 * k, 0, 2 * Math.PI);
       ctx.fill();
       ctx.stroke();
     } else {
-      ctx.strokeStyle = LOST_COLOUR;
-      ctx.lineWidth = 2;
+      var c = 7 * k;
+      ctx.strokeStyle = PAL.lost;
+      ctx.lineWidth = 2 * k;
       ctx.setLineDash([5, 5]);
       ctx.beginPath();
       ctx.ellipse(x, y, rx, ry, e.angle, 0, 2 * Math.PI);
       ctx.stroke();
       ctx.setLineDash([]);
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 3 * k;
       ctx.beginPath();
-      ctx.moveTo(x - 7, y - 7); ctx.lineTo(x + 7, y + 7);
-      ctx.moveTo(x + 7, y - 7); ctx.lineTo(x - 7, y + 7);
+      ctx.moveTo(x - c, y - c); ctx.lineTo(x + c, y + c);
+      ctx.moveTo(x + c, y - c); ctx.lineTo(x - c, y + c);
       ctx.stroke();
     }
     ctx.restore();
     if (!tr.active) {
-      labelBlock([{ text: "last seen " + ago(tr.last_seen_s), font: FONT }], x + 12, y - 12, "left", "bottom",
-        LOST_COLOUR);
+      labelBlock([{ text: "last seen " + ago(tr.last_seen_s), font: labelFont }], x + 12 * k, y - 12 * k, "left",
+        "bottom", PAL.lost);
     }
   }
 
-  // the track in words, under the map; nothing for an old log or when there is no track
+  // a puck's role glyph: a receiver is a square, a sender a dot with broadcast arcs
+  function drawGlyph(role, x, y, r) {
+    if (role === "receiver") {
+      var s = r * 0.8;
+      ctx.fillStyle = PAL.rx;
+      roundRectPath(x - s / 2, y - s / 2, s, s, s * 0.2);
+      ctx.fill();
+      return;
+    }
+    ctx.fillStyle = PAL.tx;
+    ctx.strokeStyle = PAL.tx;
+    ctx.lineWidth = Math.max(1.5, r * 0.14);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.2, 0, 2 * Math.PI);
+    ctx.fill();
+    [0.5, 0.8].forEach(function (f) {
+      ctx.beginPath();
+      ctx.arc(x, y, r * f, -0.75, 0.75);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(x, y, r * f, Math.PI - 0.75, Math.PI + 0.75);
+      ctx.stroke();
+    });
+  }
+
+  // Pucks: a round marker with its role glyph and a ring for the health of its links. A puck outside the room
+  // (rx3 beyond the top wall) gets a dashed leader to the nearest room edge and an "outside room" line in its
+  // label. A puck with movement right next to it (heatmap.busy_nodes, the near-node veto) or whose links the room
+  // decision set aside (status.room.glitch_nodes) gets an amber halo and a callout.
+  function drawPucks(p, frame, g, focus) {
+    var room = p.room, k = mapScale(), r = PUCK_R * k;
+    var busy = nameSet(p.heatmap && p.heatmap.busy_nodes);
+    var glitch = nameSet(p.status.room && p.status.room.glitch_nodes);
+    var ports = p.status.receivers || {};
+    p.nodes.forEach(function (n) {
+      if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) return;
+      var x = g.X(n.x), y = g.Y(n.y);
+      var outside = isOutsideRoom(n, room);
+      var health = puckHealth(n.name, p.links, ports[n.name]);
+      var callout = busy[n.name] || glitch[n.name];
+      if (outside) {
+        var edge = leaderEnd(n, room);
+        ctx.save();
+        ctx.strokeStyle = PAL.tick;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(g.X(edge.x), g.Y(edge.y));
+        ctx.stroke();
+        ctx.restore();
+      }
+      ctx.save();
+      if (focus && !focus.nodes[n.name]) ctx.globalAlpha = 0.45;
+      if (callout) {
+        ctx.strokeStyle = PAL.busy;
+        ctx.lineWidth = 3 * k;
+        ctx.beginPath();
+        ctx.arc(x, y, r + 9 * k, 0, 2 * Math.PI);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = PAL[health.level] || PAL.unknown;
+      ctx.lineWidth = 3 * k;
+      if (health.level === "fail") ctx.setLineDash([4 * k, 3 * k]);
+      ctx.beginPath();
+      ctx.arc(x, y, r + 3.5 * k, 0, 2 * Math.PI);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = PAL.puck;
+      ctx.strokeStyle = PAL.puckEdge;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
+      drawGlyph(n.role, x, y, r);
+      if (focus && focus.kind === "puck" && focus.id === n.name) {
+        ctx.strokeStyle = PAL.accent;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, r + 7 * k, 0, 2 * Math.PI);
+        ctx.stroke();
+      }
+      ctx.restore();
+      hits.push({ kind: "puck", id: n.name, x: x, y: y, r: r + 6 });
+      var side = labelSide(n, frame), off = r + 8 * k;
+      var lines = [{ text: n.name, font: labelFont }];
+      if (outside) lines.push({ text: "outside room", font: smallFont, colour: PAL.warn });
+      if (busy[n.name]) lines.push({ text: "activity near " + n.name, font: smallFont, colour: PAL.busy });
+      else if (glitch[n.name]) lines.push({ text: "links set aside", font: smallFont, colour: PAL.busy });
+      if (health.level === "fail") {
+        lines.push({ text: ports[n.name] === "failed" ? "port failed" : "no packets", font: smallFont,
+                     colour: PAL.fail });
+      }
+      labelBlock(lines, x + (side.dx > 0 ? off : -off), y + (side.dy > 0 ? off : -off), side.hAlign, side.vAlign,
+        PAL.text, callout ? PAL.busy : null);
+    });
+  }
+
+  function drawMap(p) {
+    var room = p.room;
+    if (!room || !(room.width_m > 0) || !(room.depth_m > 0)) { drawWaiting("no room in this frame"); return; }
+    var frame = mapBounds(room, p.nodes);
+    var g = sizeMap(room, frame);
+    view = g;
+    hits = [];
+    setFonts();
+    var at = {};
+    p.nodes.forEach(function (n) { if (Number.isFinite(n.x) && Number.isFinite(n.y)) at[n.name] = n; });
+    var focus = focusSet(p);
+    var step = tickStep(g.s);
+    ctx.clearRect(0, 0, g.W, g.H);
+
+    // room floor, then the heat (room rectangle only, and inside the footprint when the room has one), the
+    // coverage hatching when it is on, a faint metre grid over the room, then the room's outline
+    ctx.fillStyle = PAL.floor;
+    ctx.fillRect(g.rx0, g.ry0, g.rw, g.rh);
+    if (layers.heat) drawHeat(p.heatmap, g);
+    if (layers.coverage) drawCoverage(coverageFor(p), g);
+    drawGrid(room, g, step);
+    drawRoomFrame(room, g, step);
+
+    if (layers.links) {
+      drawLinks(p, at, g, focus);
+      drawSupport(p.status.room, g);
+    }
+    if (layers.track) drawTrack(usableTrack(p.track), g, p.status.time_s);
+    drawPucks(p, frame, g, focus);
+  }
+
+  function drawWaiting(text) {
+    var room = { width_m: 2.77, depth_m: 1.84 };
+    var g = sizeMap(room, mapBounds(room, []));
+    view = g;
+    hits = [];
+    setFonts();
+    ctx.clearRect(0, 0, g.W, g.H);
+    ctx.save();
+    ctx.fillStyle = PAL.floor;
+    ctx.fillRect(g.rx0, g.ry0, g.rw, g.rh);
+    ctx.fillStyle = PAL.muted;
+    ctx.font = labelFont;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text || "waiting for data", g.rx0 + g.rw / 2, g.ry0 + g.rh / 2);
+    ctx.restore();
+  }
+
+  function redraw() { if (shown) drawMap(shown); else drawWaiting(); }
+
+  // the track in words, under the map; nothing for an old log, when there is no track or the layer is off
   function renderTrack(p) {
     var tr = usableTrack(p.track);
-    var on = trackShown();
+    var on = layers.track;
     els.track.hidden = !tr || !on;
-    els.track.className = "track-note" + (tr && !tr.active ? " lost" : "");
-    if (!tr || !on) { els.track.textContent = ""; return; }
+    setClass(els.track, "note track-note" + (tr && !tr.active ? " lost" : ""));
+    if (!tr || !on) { setText(els.track, ""); return; }
     var where = "(" + fmt(tr.x, 2) + ", " + fmt(tr.y, 2) + ") m";
     var sigma = Math.max(tr.sx || 0, tr.sy || 0);
     if (!tr.active) {
-      els.track.textContent = "Last seen " + ago(tr.last_seen_s) + " at " + where + ", within about " +
-        fmt(sigma, 1) + " m. The person may have stopped moving: still people fade from the map.";
+      setText(els.track, "Last seen " + ago(tr.last_seen_s) + " at " + where + ", within about " +
+        fmt(sigma, 1) + " m. The person may have stopped moving: still people fade from the map.");
     } else if ((tr.last_seen_s || 0) > COASTING_S) {
-      els.track.textContent = "Person track coasting near " + where + ": last measured " +
-        fmt(tr.last_seen_s, 1) + " s ago.";
+      setText(els.track, "Person track coasting near " + where + ": last measured " +
+        fmt(tr.last_seen_s, 1) + " s ago.");
     } else {
-      els.track.textContent = "Person track at " + where + " \u00b1 " + fmt(sigma, 2) + " m, moving " +
+      setText(els.track, "Person track at " + where + " \u00b1 " + fmt(sigma, 2) + " m, moving " +
         fmt(Math.sqrt((tr.vx || 0) * (tr.vx || 0) + (tr.vy || 0) * (tr.vy || 0)), 1) + " m/s, followed for " +
-        duration(tr.age_s) + ".";
+        duration(tr.age_s) + ".");
     }
   }
 
@@ -870,48 +1892,189 @@
   function renderBusy(p) {
     var names = (p.heatmap && p.heatmap.busy_nodes) || [];
     els.busy.hidden = !names.length;
-    els.busy.textContent = names.map(function (name) { return "activity near " + name; }).join(", ") +
+    setText(els.busy, names.map(function (name) { return "activity near " + name; }).join(", ") +
       (names.length ? ": movement right next to " + (names.length > 1 ? "those nodes" : "that node") +
-        ", so " + (names.length > 1 ? "their" : "its") + " links are down-weighted on the map." : "");
+        ", so " + (names.length > 1 ? "their" : "its") + " links are down-weighted on the map." : ""));
   }
 
-  function drawWaiting() {
-    var room = { width_m: 2.77, depth_m: 1.84 };
-    var g = sizeMap(room, mapBounds(room, []));
-    view = g;
-    ctx.clearRect(0, 0, g.W, g.H);
-    ctx.fillStyle = "#070a0f";
-    ctx.fillRect(g.rx0, g.ry0, g.rw, g.rh);
-    ctx.fillStyle = "#9aa7b4";
-    ctx.font = FONT;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("waiting for data", g.rx0 + g.rw / 2, g.ry0 + g.rh / 2);
+  // the coverage layer in words: how much of the room fewer than 3 links cross
+  function renderCoverage(p) {
+    var on = layers.coverage && !!p.room;
+    els.coverage.hidden = !on;
+    if (!on) return;
+    var s = coverageFor(p).summary;
+    var text = !s.cells ? "Coverage: no part of the room to check."
+      : !s.blind ? "Coverage from the puck positions: at least " + COVERAGE_MIN_LINKS +
+        " links cross every part of the room."
+      : "Coverage from the puck positions: " + Math.round(100 * s.blind / s.cells) + "% of the room is crossed by " +
+        "fewer than " + COVERAGE_MIN_LINKS + " links (hatched, densest where none), so a person there cannot be " +
+        "placed. A link sees about 0.6 m + 5% of its length either side of its line, as in scripts/plan_layout.py.";
+    setText(els.coverage, text);
+  }
+
+  // ------------------------------------------------------------------ status strip
+
+  function clock(t) {
+    if (t == null) return "-";
+    var d = new Date(t * 1000);
+    var pad = function (n, w) { return String(n).padStart(w || 2, "0"); };
+    return pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()) + "." + pad(d.getMilliseconds(), 3);
+  }
+
+  // links agreeing against the number the room decision needs now (csi/adaptive.py: k of the live links)
+  function agreeText(p) {
+    var room = p.status.room;
+    if (room && Array.isArray(room.elevated)) {
+      var text = room.elevated.length + (room.required != null ? " of " + room.required + " needed" : " raised");
+      return text + (room.active != null ? " \u00b7 " + room.active + " live" : "");
+    }
+    var by = p.status.links_by_state || {};
+    return (by.MOTION || 0) + " in MOTION";
+  }
+
+  // the estimator that drew this frame, and "auto" when the server chose it (status.parameters.estimator)
+  function estimatorText(p) {
+    var used = p.heatmap ? p.heatmap.estimator : null;
+    var chosen = p.status.parameters ? p.status.parameters.estimator : null;
+    var name = used === "rti" ? "RTI" : used === "backprojection" ? "Back-projection" : null;
+    if (!name) return "-";
+    return chosen === "auto" ? name + " (auto)" : name;
+  }
+
+  function renderRoom(p) {
+    var v = roomView(p);
+    setClass(els.pill, "pill " + v.key);
+    setText(els.roomState, v.label);
+    setText(els.roomReason, v.detail);
+    if (v.label !== lastRoomKey) {         // announced and put in the title on a change only, not 5 times a second
+      lastRoomKey = v.label;
+      setText(els.announce, "Room " + v.label);
+      document.title = v.label + " \u00b7 CSI room map";
+      setAttr(els.map, "aria-label", "Room map, room " + v.label + ": " + v.detail);
+    }
+    var rs = p.status.room || {};
+    setText(els.lastMotion, rs.since_motion_s === undefined ? "-" : ago(rs.since_motion_s));
+    setText(els.agree, agreeText(p));
+    setText(els.estimator, estimatorText(p));
+  }
+
+  var recvKey = null, msgKey = null, countChips = null;
+
+  function renderReceivers(st) {
+    var all = st.receivers || {}, errors = st.errors || {};
+    var names = Object.keys(all).sort();
+    var key = names.map(function (n) { return n + "=" + all[n] + "=" + (errors[n] || ""); }).join("\n");
+    if (key === recvKey) return;
+    recvKey = key;
+    clearChildren(els.receivers);
+    if (!names.length) els.receivers.appendChild(el("span", "muted", "none"));
+    names.forEach(function (name) {
+      var s = all[name];
+      var text = s === "failed" ? name + " failed: " + (errors[name] || "error") : name + " " + s;
+      els.receivers.appendChild(el("span", "chip " + s, text));
+    });
+  }
+
+  // messages: failures first, then warnings, then the command log (muted, and hidden in the demo view)
+  function messageKind(m) {
+    if (/^command: /.test(m)) return "cmd";
+    return /failed|error|run ended/i.test(m) ? "err" : "warn";
+  }
+  function renderMessages(list) {
+    var key = list.join("\n");
+    if (key === msgKey) return;
+    msgKey = key;
+    clearChildren(els.messages);
+    var rank = { err: 0, warn: 1, cmd: 2 };
+    var items = list.map(function (m, i) { return { m: String(m), kind: messageKind(String(m)), i: i }; });
+    items.sort(function (a, b) { return rank[a.kind] - rank[b.kind] || a.i - b.i; });
+    items.forEach(function (it) { els.messages.appendChild(el("li", "msg " + it.kind, it.m)); });
+    els.msgbar.hidden = !items.length;
+    els.msgbar.classList.toggle("quiet", !items.some(function (it) { return it.kind !== "cmd"; }));
+  }
+
+  function renderCounts(p) {
+    if (!countChips) {
+      countChips = {};
+      clearChildren(els.counts);
+      STATES.forEach(function (s) {
+        countChips[s] = el("span", "count s-" + s);
+        els.counts.appendChild(countChips[s]);
+      });
+    }
+    var by = p.status.links_by_state;
+    if (!by) {
+      by = {};
+      p.links.forEach(function (row) { by[row.state] = (by[row.state] || 0) + 1; });
+    }
+    STATES.forEach(function (s) {
+      var n = by[s] || 0;
+      setText(countChips[s], n + " " + STATE_TEXT[s]);
+      setClass(countChips[s], "count s-" + s + (n ? "" : " zero"));
+    });
+  }
+
+  function renderStatus(p) {
+    var st = p.status;
+    renderReceivers(st);
+    var calText = (st.calibrated_links || []).length + " calibrated, " +
+      (st.uncalibrated_links || []).length + " uncalibrated";
+    var adaptive = st.adaptive_links || [];
+    setText(els.calib, (adaptive.length ? adaptive.length + " auto, " : "") + calText);
+    setText(els.packet, clock(st.time_s));
+    renderMessages(st.messages || []);
+    var cmds = st.commands || {};
+    els.replay.hidden = !(cmds.available === false && /replay/i.test(String(cmds.reason || "")));
+    var cal = st.calibration || { state: "idle" };
+    var active = cal.state === "countdown" || cal.state === "recording" || cal.state === "processing";
+    els.calLive.hidden = !active;
+    if (active) setText(els.calLive, cal.message || CAL_LABEL[cal.state]);
+    var hm = p.heatmap || {};
+    setText(els.heatPeak, Number.isFinite(hm.max) ? "peak " + fmt(hm.max, 2) : "peak -");
   }
 
   // ------------------------------------------------------------------ links panel
 
+  var HEALTH_CELLS = [["loss", "Loss"], ["rate", "Pkt/s"], ["rssi", "RSSI"], ["clip", "Clip"]];
+  var DETAILS = [["score", "Score"], ["thr", "Threshold"], ["norm", "vs threshold"], ["mode", "Mode"],
+    ["baseline", "Quiet baseline"], ["evidence", "Evidence"], ["heat", "Heat"], ["weight", "Weight"],
+    ["drops", "Drops"], ["sent", "Sent/s (seq)"], ["gain", "Gain agc/fft"], ["noise", "Noise floor"],
+    ["age", "Last packet"], ["motion", "Last motion"]];
+
   function makeRow(id) {
-    var art = el("article", "link");
-    var head = el("div", "head");
-    var badge = el("span", "badge");
-    var route = el("span", "route");
-    var contrib = el("span", "contrib");
-    head.appendChild(el("span", "lid", id));
-    head.appendChild(route);
-    head.appendChild(badge);
-    head.appendChild(contrib);
-    var bar = el("div", "bar", null);
+    var art = el("article", "lrow");
+    var head = el("button", "lrow-head");
+    head.type = "button";
+    head.setAttribute("aria-expanded", "false");
+    var name = el("span", "lrow-name");
+    var route = el("span", "lrow-route");
+    name.appendChild(route);
+    name.appendChild(el("span", "lrow-id", id));
+    var pill = el("span", "spill");
+    var ratio = el("span", "lrow-ratio");
+    head.appendChild(name);
+    head.appendChild(pill);
+    head.appendChild(ratio);
+    var bar = el("div", "lbar");
     bar.setAttribute("role", "img");
-    var fill = el("div", "fill");
+    var fill = el("div", "lbar-fill");
     bar.appendChild(fill);
-    bar.appendChild(el("div", "mark"));
-    var nums = el("dl", "nums");
-    var cells = {};
-    [["score", "Score"], ["thr", "Threshold"], ["norm", "vs threshold"], ["rate", "Packets/s"],
-     ["drops", "Drops"], ["rssi", "RSSI"], ["weight", "Weight"], ["sent", "Sent/s (seq)"], ["loss", "Loss (seq)"],
-     ["clip", "Clipped"], ["gain", "Gain agc/fft"], ["noise", "Noise floor"],
-     ["motion", "Last motion"]].forEach(function (f) {
+    bar.appendChild(el("div", "lbar-mark"));
+    var health = el("div", "lrow-health"), hcells = {};
+    HEALTH_CELLS.forEach(function (f) {
+      var cell = el("span", "hm");
+      cell.appendChild(el("span", "hm-k", f[1]));
+      var v = el("span", "hm-v", "-");
+      cell.appendChild(v);
+      health.appendChild(cell);
+      hcells[f[0]] = { cell: cell, v: v };
+    });
+    var issues = el("p", "lrow-issues");
+    issues.hidden = true;
+    var details = el("div", "lrow-details");
+    details.hidden = true;
+    var nums = el("dl", "kv-grid"), cells = {};
+    DETAILS.forEach(function (f) {
       var wrap = el("div", "kv");
       wrap.appendChild(el("dt", null, f[1]));
       var dd = el("dd", null, "-");
@@ -921,43 +2084,68 @@
     });
     var spark = el("canvas", "spark");
     spark.setAttribute("role", "img");
-    spark.setAttribute("aria-label", "score history for the last 30 seconds");
+    spark.setAttribute("aria-label", "score against threshold for the last 30 seconds");
+    details.appendChild(nums);
+    details.appendChild(spark);
     art.appendChild(head);
     art.appendChild(bar);
-    art.appendChild(nums);
-    art.appendChild(spark);
-    return { art: art, badge: badge, route: route, contrib: contrib, bar: bar, fill: fill, cells: cells, spark: spark };
+    art.appendChild(health);
+    art.appendChild(issues);
+    art.appendChild(details);
+    var r = { id: id, art: art, head: head, route: route, pill: pill, ratio: ratio, bar: bar, fill: fill,
+              health: hcells, issues: issues, details: details, cells: cells, spark: spark, open: false,
+              baseCls: "lrow", receiver: null, sender: null, width: null, state: null };
+    head.addEventListener("click", function () { toggleRow(r); });
+    art.addEventListener("mouseenter", function () { setHover({ kind: "link", id: id }); });
+    art.addEventListener("mouseleave", function () { setHover(null); });
+    return r;
+  }
+
+  function healthCell(c, text, warn) {
+    setText(c.v, text);
+    setClass(c.cell, warn ? "hm warn" : "hm");
   }
 
   function updateRow(r, row, now) {
     var state = row.state;
-    r.badge.textContent = state;
-    r.badge.className = "badge s-" + state;
-    r.route.textContent = row.receiver + " from " + (row.sender || row.mac);
+    var issues = linkIssues(row);
+    r.receiver = row.receiver;
+    r.sender = row.sender;
+    r.state = state;
+    r.baseCls = "lrow s-" + state;
+    setText(r.route, row.receiver + " \u2190 " + (row.sender || row.mac));
+    setText(r.pill, STATE_TEXT[state] || state);
+    setClass(r.pill, "spill s-" + state);
     var norm = row.normalised;
-    r.fill.style.width = norm == null ? "0%" : (clamp(norm / FULL_SCALE, 0, 1) * 100).toFixed(1) + "%";
-    r.fill.style.background = COLOR[state] || COLOR.NO_SIGNAL;
-    r.bar.setAttribute("aria-label", norm == null ? "no threshold" : "score " + fmt(norm, 2) + " times threshold");
-    r.cells.score.textContent = fmt(row.score, 3);
-    r.cells.thr.textContent = fmt(row.threshold, 3);
-    r.cells.norm.textContent = norm == null ? "-" : fmt(norm, 2) + "x";
-    r.cells.rate.textContent = fmt(row.pkt_rate, 1);
-    r.cells.drops.textContent = row.drops == null ? "-" : String(row.drops);
-    r.cells.rssi.textContent = row.rssi == null ? "-" : row.rssi + " dBm";
-    r.cells.weight.textContent = fmt(row.weight, 2);
+    setText(r.ratio, norm == null ? "-" : fmt(norm, 2) + "\u00d7");
+    var width = norm == null ? "0%" : (clamp(norm / FULL_SCALE, 0, 1) * 100).toFixed(1) + "%";
+    if (r.width !== width) { r.width = width; r.fill.style.width = width; }
+    setAttr(r.bar, "aria-label", norm == null ? "no threshold" : "score " + fmt(norm, 2) + " times threshold");
     // link health (csi/links.py); a payload from an older server or log has none of these and shows "-"
-    r.cells.sent.textContent = fmt(row.seq_rate, 1);
-    r.cells.loss.textContent = pct(row.seq_loss);
-    r.cells.loss.className = row.seq_loss != null && row.seq_loss > LOSS_WARN ? "warn" : "";
-    r.cells.clip.textContent = pct(row.clip_pct);
-    r.cells.clip.className = row.clip_pct != null && row.clip_pct > CLIP_WARN ? "warn" : "";
-    r.cells.gain.textContent = row.agc_gain == null && row.fft_gain == null ? "-"
-      : (row.agc_gain == null ? "-" : row.agc_gain) + " / " + (row.fft_gain == null ? "-" : row.fft_gain);
-    r.cells.noise.textContent = row.noise_floor == null ? "-" : String(row.noise_floor);
-    r.cells.motion.textContent = row.since_motion_s === undefined ? "-" : ago(row.since_motion_s);
-    r.contrib.textContent = row.contributes ? "contributes" : "no heat";
-    r.contrib.className = "contrib" + (row.contributes ? " on" : "");
-    drawSpark(r.spark, history[row.id] || [], state, now);
+    healthCell(r.health.loss, pct(row.seq_loss), row.seq_loss != null && row.seq_loss > LOSS_WARN);
+    healthCell(r.health.rate, fmt(row.pkt_rate, 1),
+      state !== "NO_SIGNAL" && row.pkt_rate != null && row.pkt_rate < RATE_WARN);
+    healthCell(r.health.rssi, row.rssi == null ? "-" : row.rssi + " dBm", row.rssi != null && row.rssi < RSSI_WARN);
+    healthCell(r.health.clip, pct(row.clip_pct), row.clip_pct != null && row.clip_pct > CLIP_WARN);
+    setText(r.issues, issues.length ? "Check: " + issues.join(", ") : "");
+    r.issues.hidden = !issues.length;
+    var c = r.cells;
+    setText(c.score, fmt(row.score, 3));
+    setText(c.thr, row.threshold == null ? "-" : fmt(row.threshold, 3) + (row.mode === "auto" ? " (auto)" : ""));
+    setText(c.norm, norm == null ? "-" : fmt(norm, 2) + "x");
+    setText(c.mode, row.mode == null ? "-" : row.mode);
+    setText(c.baseline, fmt(row.baseline, 3));
+    setText(c.evidence, fmt(row.evidence, 2));
+    setText(c.heat, row.contributes == null ? "-" : row.contributes ? "contributes" : "no heat");
+    setText(c.weight, fmt(row.weight, 2));
+    setText(c.drops, row.drops == null ? "-" : String(row.drops));
+    setText(c.sent, fmt(row.seq_rate, 1));
+    setText(c.gain, row.agc_gain == null && row.fft_gain == null ? "-"
+      : (row.agc_gain == null ? "-" : row.agc_gain) + " / " + (row.fft_gain == null ? "-" : row.fft_gain));
+    setText(c.noise, row.noise_floor == null ? "-" : String(row.noise_floor));
+    setText(c.age, row.age_s === undefined ? "-" : row.age_s === null ? "never" : fmt(row.age_s, 1) + " s ago");
+    setText(c.motion, row.since_motion_s === undefined ? "-" : ago(row.since_motion_s));
+    if (r.open) drawSpark(r.spark, history[row.id] || [], state, now);
   }
 
   function drawSpark(canvas, points, state, now) {
@@ -971,7 +2159,7 @@
     var c = canvas.getContext("2d");
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     c.clearRect(0, 0, w, h);
-    c.fillStyle = "#0b1017";
+    c.fillStyle = PAL.floor;
     c.fillRect(0, 0, w, h);
     var top = 3, bottom = h - 3;
     var maxV = FULL_SCALE;
@@ -981,7 +2169,7 @@
     var xOf = function (t) { return clamp((t - tStart) / WINDOW_S, 0, 1) * w; };
     // the threshold, at normalised 1
     c.setLineDash([3, 3]);
-    c.strokeStyle = "rgba(232, 237, 243, 0.55)";
+    c.strokeStyle = PAL.muted;
     c.lineWidth = 1;
     c.beginPath();
     c.moveTo(0, yOf(1));
@@ -989,7 +2177,7 @@
     c.stroke();
     c.setLineDash([]);
     // the score history; a gap where the link had no threshold or no signal
-    c.strokeStyle = COLOR[state] || COLOR.NO_SIGNAL;
+    c.strokeStyle = PAL[state] || PAL.NO_SIGNAL;
     c.lineWidth = 2;
     c.lineJoin = "round";
     c.beginPath();
@@ -1004,63 +2192,172 @@
   }
 
   function renderLinks(p) {
-    // one row per link, in payload order; rows are reused, and placeholder text is replaced
+    // one row per link, reused; reordered (attention or name) only when the order changes
     var seen = {};
-    clearChildren(els.links);
     p.links.forEach(function (row) {
       var r = rows[row.id] || (rows[row.id] = makeRow(row.id));
       seen[row.id] = true;
       updateRow(r, row, p.status.time_s);
-      els.links.appendChild(r.art);
     });
     Object.keys(rows).forEach(function (id) { if (!seen[id]) delete rows[id]; });
-    if (!p.links.length) els.links.appendChild(el("p", "muted", "no links"));
+    var order = sortedLinkIds(p.links, sortMode).filter(function (id) { return rows[id]; });
+    var key = order.join("\n");
+    if (key !== rowOrder) {
+      rowOrder = key;
+      clearChildren(els.links);
+      order.forEach(function (id) { els.links.appendChild(rows[id].art); });
+      if (!order.length) els.links.appendChild(el("p", "muted", "no links"));
+    }
+    renderCounts(p);
   }
 
-  // ------------------------------------------------------------------ status bar
+  // ------------------------------------------------------------------ pucks panel
 
-  function clock(t) {
-    if (t == null) return "-";
-    var d = new Date(t * 1000);
-    var pad = function (n, w) { return String(n).padStart(w || 2, "0"); };
-    return pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()) + "." + pad(d.getMilliseconds(), 3);
+  function makePuckRow(name) {
+    var btn = el("button", "prow");
+    btn.type = "button";
+    btn.setAttribute("aria-pressed", "false");
+    var glyph = el("span", "pglyph");
+    glyph.setAttribute("aria-hidden", "true");
+    var main = el("span", "prow-main");
+    var title = el("span", "prow-title");
+    title.appendChild(el("span", "prow-name", name));
+    var role = el("span", "prow-role");
+    title.appendChild(role);
+    var sub = el("span", "prow-sub");
+    main.appendChild(title);
+    main.appendChild(sub);
+    var stat = el("span", "prow-stat");
+    btn.appendChild(glyph);
+    btn.appendChild(main);
+    btn.appendChild(stat);
+    var r = { name: name, btn: btn, glyph: glyph, role: role, sub: sub, stat: stat, baseCls: "prow" };
+    btn.addEventListener("click", function () { select({ kind: "puck", id: name }, false); });
+    btn.addEventListener("mouseenter", function () { setHover({ kind: "puck", id: name }); });
+    btn.addEventListener("mouseleave", function () { setHover(null); });
+    return r;
   }
 
-  function renderStatus(p) {
-    var st = p.status;
-
-    clearChildren(els.receivers);
-    var names = Object.keys(st.receivers || {}).sort();
-    if (!names.length) els.receivers.appendChild(el("span", "muted", "none"));
-    names.forEach(function (name) {
-      var s = st.receivers[name];
-      var text = s === "failed" ? name + " failed: " + ((st.errors || {})[name] || "error") : name + " " + s;
-      els.receivers.appendChild(el("span", "chip " + s, text));
-      els.receivers.appendChild(document.createTextNode(" "));
+  function renderPucks(p) {
+    var ports = p.status.receivers || {};
+    var busy = nameSet(p.heatmap && p.heatmap.busy_nodes);
+    var glitch = nameSet(p.status.room && p.status.room.glitch_nodes);
+    var seen = {}, order = [], good = 0;
+    p.nodes.forEach(function (n) {
+      if (!n || seen[n.name]) return;
+      var r = puckRows[n.name] || (puckRows[n.name] = makePuckRow(n.name));
+      seen[n.name] = true;
+      order.push(n.name);
+      var h = puckHealth(n.name, p.links, ports[n.name]);
+      if (h.level === "good") good++;
+      r.baseCls = "prow h-" + h.level;
+      setClass(r.glyph, "pglyph" + (n.role === "receiver" ? "" : " tx"));
+      setText(r.role, [n.role, n.chip].filter(Boolean).join(" \u00b7 "));
+      var notes = ["(" + fmt(n.x, 2) + ", " + fmt(n.y, 2) + ") m"];
+      if (p.room && isOutsideRoom(n, p.room)) notes.push("outside room");
+      if (busy[n.name]) notes.push("activity near");
+      else if (glitch[n.name]) notes.push("links set aside");
+      if (ports[n.name] === "failed") notes.push("port failed");
+      setText(r.sub, notes.join(" \u00b7 "));
+      setText(r.stat, h.total ? h.healthy + "/" + h.total + " links ok" : "no links");
     });
-
-    clearChildren(els.counts);
-    var byState = st.links_by_state || {};
-    STATES.forEach(function (s) {
-      var chip = el("span", "chip state", (byState[s] || 0) + " " + s);
-      chip.style.borderLeftColor = COLOR[s];
-      els.counts.appendChild(chip);
-      els.counts.appendChild(document.createTextNode(" "));
-    });
-
-    els.calib.textContent = (st.calibrated_links || []).length + " calibrated, " +
-      (st.uncalibrated_links || []).length + " uncalibrated";
-    els.packet.textContent = clock(st.time_s);
-    var roomStatus = st.room || {};
-    els.lastMotion.textContent = roomStatus.since_motion_s === undefined ? "-" : ago(roomStatus.since_motion_s);
-
-    clearChildren(els.messages);
-    var messages = st.messages || [];
-    if (!messages.length) els.messages.appendChild(el("li", "muted", "none"));
-    messages.forEach(function (m) { els.messages.appendChild(el("li", null, m)); });
+    Object.keys(puckRows).forEach(function (name) { if (!seen[name]) delete puckRows[name]; });
+    var key = order.join("\n");
+    if (key !== puckOrder) {
+      puckOrder = key;
+      clearChildren(els.pucks);
+      order.forEach(function (name) { els.pucks.appendChild(puckRows[name].btn); });
+      if (!order.length) els.pucks.appendChild(el("p", "muted", "no pucks in this frame"));
+    }
+    setText(els.pucksSummary, order.length ? good + " of " + order.length + " with every link good" : "");
   }
 
-  // ------------------------------------------------------------------ render
+  // ------------------------------------------------------------------ selection (map and side panel stay in step)
+
+  function sameItem(a, b) { return !!a && !!b && a.kind === b.kind && a.id === b.id; }
+
+  function applySelection() {
+    var link = sel && sel.kind === "link" ? rows[sel.id] : null;
+    Object.keys(rows).forEach(function (id) {
+      var r = rows[id], cls = r.baseCls;
+      if (sel && sel.kind === "link" && sel.id === id) cls += " sel";
+      else if (sel && sel.kind === "puck" && (r.receiver === sel.id || r.sender === sel.id)) cls += " rel";
+      setClass(r.art, cls);
+    });
+    Object.keys(puckRows).forEach(function (name) {
+      var r = puckRows[name], cls = r.baseCls, on = !!sel && sel.kind === "puck" && sel.id === name;
+      if (on) cls += " sel";
+      else if (link && (link.receiver === name || link.sender === name)) cls += " rel";
+      setClass(r.btn, cls);
+      setAttr(r.btn, "aria-pressed", String(on));
+    });
+  }
+
+  function scrollIntoViewSoft(node) {
+    if (!node || typeof node.scrollIntoView !== "function") return;
+    try {
+      var smooth = !prefers("(prefers-reduced-motion: reduce)");
+      node.scrollIntoView({ block: "nearest", behavior: smooth ? "smooth" : "auto" });
+    } catch (err) { node.scrollIntoView(false); }
+  }
+
+  function setOpen(r, open) {
+    r.open = open;
+    r.details.hidden = !open;
+    setAttr(r.head, "aria-expanded", String(open));
+    if (open && shown && r.state) drawSpark(r.spark, history[r.id] || [], r.state, shown.status.time_s);
+  }
+
+  // a click on a row's head opens its details and brings the link forward on the map; a second click closes it
+  function toggleRow(r) {
+    hover = null;   // a tap on a touch screen leaves no mouseleave to clear it
+    setOpen(r, !r.open);
+    if (r.open) sel = { kind: "link", id: r.id };
+    else if (sel && sel.kind === "link" && sel.id === r.id) sel = null;
+    applySelection();
+    redraw();
+  }
+
+  function select(item, fromMap) {
+    hover = null;
+    sel = item && !sameItem(item, sel) ? item : null;
+    if (sel && sel.kind === "link" && rows[sel.id]) {
+      setOpen(rows[sel.id], true);
+      if (fromMap) scrollIntoViewSoft(rows[sel.id].art);
+    } else if (sel && sel.kind === "puck" && puckRows[sel.id] && fromMap) {
+      scrollIntoViewSoft(puckRows[sel.id].btn);
+    }
+    applySelection();
+    redraw();
+  }
+
+  function setHover(item) {
+    if (sameItem(item, hover) || (!item && !hover)) return;
+    hover = item;
+    redraw();
+  }
+
+  function mapPoint(ev) {
+    var rect = typeof els.map.getBoundingClientRect === "function" ? els.map.getBoundingClientRect() : null;
+    return rect ? { x: ev.clientX - rect.left, y: ev.clientY - rect.top } : null;
+  }
+
+  // the puck under the point, else the link within 8 px of it
+  function hitAt(pt) {
+    for (var i = hits.length - 1; i >= 0; i--) {
+      var h = hits[i];
+      if (h.kind === "puck" && Math.sqrt((pt.x - h.x) * (pt.x - h.x) + (pt.y - h.y) * (pt.y - h.y)) <= h.r) return h;
+    }
+    var best = null, bestD = 8;
+    hits.forEach(function (h) {
+      if (h.kind !== "link") return;
+      var dx = h.x2 - h.x1, dy = h.y2 - h.y1, l2 = dx * dx + dy * dy;
+      var t = l2 > 0 ? clampUnit(((pt.x - h.x1) * dx + (pt.y - h.y1) * dy) / l2) : 0;
+      var ex = h.x1 + t * dx - pt.x, ey = h.y1 + t * dy - pt.y, d = Math.sqrt(ex * ex + ey * ey);
+      if (d < bestD) { bestD = d; best = h; }
+    });
+    return best;
+  }
 
   // ------------------------------------------------------------------ controls
 
@@ -1071,7 +2368,8 @@
     { key: "rise", field: "rise_tau_s", id: "tune-rise" },
     { key: "falloff", field: "falloff_m", id: "tune-falloff" }
   ];
-  var thrRows = {};             // link id -> { row, cur, input, btn }, built once per link
+  var thrRows = {};             // link id -> { row, cur, input, btn, auto }, built once per link
+  var calKey = null;            // what the calibration result table shows
 
   function command(path, body) {
     return fetch(path, {
@@ -1119,13 +2417,25 @@
       });
     });
     row.appendChild(btn);
-    return { row: row, cur: cur, input: input, btn: btn };
+    // auto mode only: back to the link's own adaptive level (the server takes value null for that)
+    var auto = el("button", null, "Auto");
+    auto.type = "button";
+    auto.hidden = true;
+    auto.setAttribute("aria-label", "return " + id + " to its adaptive level");
+    auto.addEventListener("click", function () {
+      command("/api/threshold", { link: id, value: null }).then(function (r) { reply("thr-error", r); });
+    });
+    row.appendChild(auto);
+    return { row: row, cur: cur, input: input, btn: btn, auto: auto };
   }
 
   function renderCalibrationResult(cal) {
+    var result = cal.result || {}, skipped = cal.skipped || {};
+    var key = JSON.stringify([result, skipped]);
+    if (key === calKey) return;
+    calKey = key;
     var box = $("cal-result");
     clearChildren(box);
-    var result = cal.result || {}, skipped = cal.skipped || {};
     var kept = Object.keys(result).sort(), skip = Object.keys(skipped).sort();
     if (!kept.length && !skip.length) return;
     var table = el("table", "cal-table");
@@ -1163,6 +2473,7 @@
     showError("ctl-reason", on ? "" : (cmds.reason || "commands are not available"));
     var cal = p.status.calibration || { state: "idle" };
     var active = cal.state === "countdown" || cal.state === "recording" || cal.state === "processing";
+    var autoMode = !!(p.status.room && p.status.room.mode === "auto");
 
     $("cal-start").disabled = !on || active;
     $("cal-cancel").disabled = !on || !(cal.state === "countdown" || cal.state === "recording");
@@ -1171,7 +2482,7 @@
     TUNING.forEach(function (t) { $(t.id).disabled = !on; });
 
     $("cal-state").setAttribute("data-state", cal.state);
-    $("cal-state").textContent = cal.message || CAL_LABEL[cal.state] || "Idle. Keep the room empty when you start.";
+    setText($("cal-state"), cal.message || CAL_LABEL[cal.state] || "Idle. Keep the room empty when you start.");
     renderCalibrationResult(cal);
 
     var list = $("thr-list");
@@ -1183,13 +2494,19 @@
         list.appendChild(made.row);
       }
       var t = thrRows[row.id];
-      t.cur.textContent = row.threshold == null ? "uncalibrated (no threshold)"
-        : "threshold " + fmt(row.threshold, 4) + ", now " + row.state;
+      var now = STATE_TEXT[row.state] || row.state;
+      var auto = row.mode === "auto";
+      setText(t.cur, auto && row.threshold == null ? "auto: learning its level, now " + now
+        : auto ? "auto: enter level " + fmt(row.threshold, 4) + ", now " + now
+        : row.threshold == null ? "uncalibrated (no threshold)"
+        : "threshold " + fmt(row.threshold, 4) + ", now " + now);
       t.input.disabled = !on;
       t.btn.disabled = !on;
-      if (document.activeElement !== t.input) {
-        t.input.value = row.threshold == null ? "" : String(Number(row.threshold.toPrecision(4)));
-      }
+      t.auto.hidden = !autoMode;
+      t.auto.disabled = !on;
+      var level = row.threshold == null ? "" : String(Number(row.threshold.toPrecision(4)));
+      if (document.activeElement !== t.input) t.input.value = auto ? "" : level;   // an auto level is not a fixed one
+      t.input.placeholder = auto ? level : "";
     });
 
     var params = p.status.parameters || {};
@@ -1197,11 +2514,12 @@
       var input = $(t.id), value = params[t.field];
       if (value == null) return;
       if (document.activeElement !== input) input.value = value;
-      $(t.id + "-out").textContent = String(Number(value.toPrecision(3)));
+      setText($(t.id + "-out"), String(Number(value.toPrecision(3))));
     });
   }
 
   function wireControls() {
+    $("cal-noisy").checked = false;   // quiet-room rules unless someone ticks it now, even after a reload
     $("cal-start").addEventListener("click", function () {
       command("/api/calibrate", {
         clips: Number($("cal-clips").value), seconds: Number($("cal-seconds").value),
@@ -1218,7 +2536,7 @@
     });
     TUNING.forEach(function (t) {
       var input = $(t.id);
-      input.addEventListener("input", function () { $(t.id + "-out").textContent = input.value; });
+      input.addEventListener("input", function () { setText($(t.id + "-out"), input.value); });
       input.addEventListener("change", function () {
         var body = {};
         body[t.key] = Number(input.value);
@@ -1227,29 +2545,148 @@
     });
   }
 
+  // ------------------------------------------------------------------ view: pause, demo, drawer, layers, sort, theme
+
+  function togglePause() {
+    paused = !paused;
+    els.pause.textContent = paused ? "Resume" : "Pause";
+    els.pause.setAttribute("aria-pressed", String(paused));
+    els.pausedFlag.hidden = !paused;
+    els.pausedFlag.textContent = "PAUSED";
+    els.mapCard.classList.toggle("paused", paused);
+    missed = 0;
+    if (!paused && latest) render(latest);   // resume jumps to the latest payload
+  }
+
+  function setDrawer(open, moveFocus) {
+    drawerOpen = open;
+    els.controls.classList.toggle("open", open);
+    els.drawerToggle.setAttribute("aria-expanded", String(open));
+    var target = open ? els.drawerClose : els.drawerToggle;
+    if (moveFocus && target && typeof target.focus === "function") target.focus();
+  }
+
+  // the demo view: no drawer and no side panel, a larger map and room state (also #demo in the address)
+  function setDemo(on) {
+    demo = on;
+    els.app.classList.toggle("demo", on);
+    els.demo.setAttribute("aria-pressed", String(on));
+    els.demo.textContent = on ? "Exit demo" : "Demo";
+    if (on && drawerOpen) setDrawer(false, false);
+    try {
+      if (window.history && window.history.replaceState && window.location) {
+        window.history.replaceState(null, "", on ? "#demo" : window.location.pathname + window.location.search);
+      }
+    } catch (err) { /* some pages may not rewrite their address */ }
+    if (shown) render(shown); else drawWaiting();
+  }
+
+  function setSort(mode, remember) {
+    sortMode = mode;
+    if (remember) store(SORT_KEY, mode);
+    els.sortAttention.setAttribute("aria-pressed", String(mode === "attention"));
+    els.sortName.setAttribute("aria-pressed", String(mode === "name"));
+    if (shown) { renderLinks(shown); applySelection(); }
+  }
+
+  function themeChanged() {
+    readPalette();
+    covKey = null;
+    var next = activeTheme() === "dark" ? "light" : "dark";
+    els.theme.textContent = next === "light" ? "Light" : "Dark";
+    els.theme.setAttribute("aria-label", "Switch to the " + next + " theme");
+    if (shown) render(shown); else drawWaiting();
+  }
+
+  function setTheme(theme) {
+    if (rootEl && rootEl.setAttribute) rootEl.setAttribute("data-theme", theme);
+    store(THEME_KEY, theme);
+    themeChanged();
+  }
+
+  function onKey(ev) {
+    var tag = ev.target && ev.target.tagName ? String(ev.target.tagName).toLowerCase() : "";
+    if (ev.key === "Escape") {
+      if (drawerOpen) setDrawer(false, true);
+      else if (sel) select(null, false);
+      else if (demo) setDemo(false);
+      return;
+    }
+    if (tag === "input" || tag === "textarea" || tag === "select" || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if (ev.key === "d" || ev.key === "D") setDemo(!demo);
+  }
+
+  function wireView() {
+    els.pause.addEventListener("click", togglePause);
+    els.demo.addEventListener("click", function () { setDemo(!demo); });
+    els.drawerToggle.addEventListener("click", function () { setDrawer(!drawerOpen, true); });
+    els.drawerClose.addEventListener("click", function () { setDrawer(false, true); });
+    els.calLive.addEventListener("click", function () { setDrawer(true, true); });
+    els.theme.addEventListener("click", function () { setTheme(activeTheme() === "dark" ? "light" : "dark"); });
+    els.sortAttention.addEventListener("click", function () { setSort("attention", true); });
+    els.sortName.addEventListener("click", function () { setSort("name", true); });
+    Object.keys(LAYER_INPUTS).forEach(function (key) {
+      var input = $(LAYER_INPUTS[key]);
+      if (typeof input.checked === "boolean") layers[key] = input.checked;   // a reload may have restored it
+      input.addEventListener("change", function () {
+        layers[key] = !!input.checked;
+        if (shown) render(shown); else drawWaiting();
+      });
+    });
+    els.map.addEventListener("click", function (ev) {
+      var pt = mapPoint(ev);
+      if (!pt) return;
+      var h = hitAt(pt);
+      select(h ? { kind: h.kind, id: h.id } : null, true);
+    });
+    els.map.addEventListener("mousemove", function (ev) {
+      var pt = mapPoint(ev);
+      els.map.style.cursor = pt && hitAt(pt) ? "pointer" : "";
+    });
+    window.addEventListener("keydown", onKey);
+    var resizeQueued = false;
+    window.addEventListener("resize", function () {
+      if (resizeQueued) return;
+      resizeQueued = true;
+      window.requestAnimationFrame(function () {
+        resizeQueued = false;
+        if (shown) render(shown); else drawWaiting();
+      });
+    });
+    try {   // follow the system theme while the viewer has not chosen one
+      var mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: light)") : null;
+      var follow = function () { if (!load(THEME_KEY)) themeChanged(); };
+      if (mq && mq.addEventListener) mq.addEventListener("change", follow);
+      else if (mq && mq.addListener) mq.addListener(follow);
+    } catch (err) { /* no media queries */ }
+  }
+
+  // ------------------------------------------------------------------ render
+
   function render(p) {
+    p = withGeometry(p);
     shown = p;
     drawMap(p);
+    renderRoom(p);
     renderBusy(p);
     renderTrack(p);
+    renderCoverage(p);
     renderLinks(p);
+    renderPucks(p);
+    applySelection();
     renderStatus(p);
     renderControls(p);
   }
 
-  var resizeQueued = false;
-  window.addEventListener("resize", function () {
-    if (resizeQueued) return;
-    resizeQueued = true;
-    window.requestAnimationFrame(function () {
-      resizeQueued = false;
-      if (shown) render(shown); else drawWaiting();
-    });
-  });
-
+  var savedTheme = load(THEME_KEY);
+  if ((savedTheme === "light" || savedTheme === "dark") && rootEl && rootEl.setAttribute) {
+    rootEl.setAttribute("data-theme", savedTheme);
+  }
   wireControls();
-  els.trackShow.addEventListener("change", function () { if (shown) render(shown); });
-  drawWaiting();
+  wireView();
+  setSort(load(SORT_KEY) === "name" ? "name" : "attention", false);
+  themeChanged();
+  if (window.location && window.location.hash === "#demo") setDemo(true);
   start();
 })();
 </script>
