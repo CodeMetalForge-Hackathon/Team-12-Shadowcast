@@ -758,3 +758,74 @@ def test_map_and_side_panel_select_together_and_layers_demo_drawer_pause_and_the
     assert out["drawerOpened"] and out["drawerClosed"]
     assert out["pausedDraws"] == 0 and out["pausedFlag"] == "PAUSED, 1 newer" and out["resumed"]
     assert out["theme"] == "light"
+
+
+# ---------------------------------------------------------------- Map / 3D (v7: the floor plan's line overlay is gone)
+# The 2D map is the room alone again (no plan lines, no Room / Whole floor switch); the building floor is shown in a
+# solid 3D view instead, drawn with three.js embedded in the page (no network) from GET /api/floorplan.
+
+def test_page_has_no_floor_plan_lines_and_a_map_3d_switch():
+    html = PAGE.read_text(encoding="utf-8")
+    for gone in ('id="plan-key"', 'id="layer-plan"', 'id="plan-views"', 'id="view-room"', 'id="view-floor"',
+                 "drawPlan(", "PLAN_STYLE", "planView"):
+        assert gone not in html, gone
+    assert re.search(r'<button[^>]*id="view-map"[^>]*aria-pressed="true"[^>]*>Map</button>', html)
+    assert re.search(r'<button[^>]*id="view-3d"[^>]*aria-pressed="false"[^>]*>3D</button>', html)
+    for needle in ('id="view3d"', 'id="view3d-ctl"', 'id="view-reset"', 'id="view3d-note"'):
+        assert needle in html, needle
+    assert not re.search(r'<input[^>]*id="layer-links3d"[^>]*checked', html)    # links in 3D: off at first
+    assert 'fetch("/api/floorplan"' in html                                      # the building, for the 3D view
+    script = html.split("<script>")[1].split("</script>")[0]
+    assert "heatCanvas" in script[script.index("function buildHeat3d"):]          # 3D shows the 2D heat image
+
+
+def test_page_embeds_three_js_with_its_licence_and_keeps_its_own_script_first():
+    html = PAGE.read_text(encoding="utf-8")
+    vendor = html.split('<script id="vendor-three">')[1].split("</script>")[0]
+    assert "three.js 0.147.0" in vendor and "Permission is hereby granted, free of charge" in vendor
+    assert 'const e="147"' in vendor and "THREE.OrbitControls = OrbitControls;" in vendor
+    assert html.count("<script>") == 1                       # the page's own script is the one bare <script>
+    assert "function drawHeat(" in html.split("<script>")[1].split("</script>")[0]
+
+
+VIEW3D_STUB = INTERACT_STUB.split("const errors = [], out = {};")[0] + r"""
+const errors = [], out = {};
+(async () => {
+  try {
+    new Function("window", "document", "fetch", "EventSource", "setTimeout", "clearTimeout", script)(
+      window, document, () => Promise.reject(new Error("no server")), FakeEventSource, noop, noop);
+    for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
+    stream.onmessage({ data: JSON.stringify(input.payload) });
+    elements["view-3d"].fire("click", {});
+    out.is3d = elements["map-card"].className.includes("is-3d");
+    out.pressed = [elements["view-map"].getAttribute("aria-pressed"), elements["view-3d"].getAttribute("aria-pressed")];
+    out.shown = elements.view3d.hidden === false && elements["view3d-ctl"].hidden === false;
+    out.note = elements["view3d-note"].hidden === false ? elements["view3d-note"].textContent : null;
+    elements["view-map"].fire("click", {});
+    out.back = !elements["map-card"].className.includes("is-3d") && elements.view3d.hidden === true &&
+      elements["view3d-note"].hidden === true;
+    mapLog.length = 0;
+    stream.onmessage({ data: JSON.stringify(input.payload) });
+    out.heatDraws = mapLog.filter((c) => c[0] === "drawImage").length;
+  } catch (err) { errors.push(String((err && err.stack) || err)); }
+  console.log(JSON.stringify({ out, errors }));
+})();
+"""
+
+
+@pytest.mark.slow
+@needs_node
+def test_the_3d_switch_says_when_3d_cannot_run_and_the_map_comes_back(tmp_path):
+    script = tmp_path / "view3d_stub.js"
+    script.write_text(VIEW3D_STUB, encoding="utf-8")
+    payload = DashboardState(load_room(FIVE)).snapshot(now=NOW)
+    proc = subprocess.run(["node", str(script)], input=json.dumps({"html": PAGE.read_text(encoding="utf-8"),
+                                                                   "payload": payload}),
+                          capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, proc.stderr
+    result = json.loads(proc.stdout)
+    assert result["errors"] == []
+    out = result["out"]
+    assert out["is3d"] and out["pressed"] == ["false", "true"] and out["shown"]
+    assert out["note"] == "The 3D view did not load in this browser."       # no three.js under node: said so
+    assert out["back"] and out["heatDraws"] == 1                             # the map again, its heat drawn

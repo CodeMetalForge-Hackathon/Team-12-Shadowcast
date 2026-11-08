@@ -577,6 +577,10 @@ What the page shows (`web/index.html`, one static file with no network assets):
   the heatmap. The caption under the map says how many links drew it and with which estimator
   (back-projection or RTI). A node with movement right next to it gets a ring, an "activity near" label
   and a note under the map (see [Reading the heatmap](#reading-the-heatmap)).
+- **3D.** The "Map / 3D" switch under the map opens the room in 3D on its building floor (a room config with
+  a `"floor_plan"`, see `config/floorplans/README.md`): the floor as a solid model, the pucks 1 m up, and the
+  same heat image as the map, raised where there is heat. Drag to turn, scroll to zoom, right-drag to pan;
+  "Reset view" frames the room again. three.js is embedded in the page, so it needs no network.
 - **Person track.** Over the heatmap, in cyan: the trail of the last 20 s, the current estimate with its
   uncertainty ellipse, or a "last seen" marker, and a line of text under the map that says the same in
   words. **Show the person track** hides it; the heatmap stays. See [Reading the track](#reading-the-track).

@@ -12,7 +12,12 @@ with the plan's bounds in room coordinates:
 
     {"name", "source", "units": "m", "frame": "room", "placement": {"file", "origin_m", "rotation_deg"},
      "bounds": [x0, y0, x1, y1],
-     "groups": {name: {"kind", "segments": [x0, y0, x1, y1, ...], "mesh"?: [...], "fills"?: [[x, y, ...], ...]}}}
+     "groups": {name: {"kind", "segments": [x0, y0, x1, y1, ...], "mesh"?: [...], "fills"?: [[x, y, ...], ...],
+                       "height"?: [y0, y1], "bands"?: [{"height": [y0, y1], "segments": [...]}, ...],
+                       "outline"?: [[x, y, ...], ...], "steps"?: [[h, x, y, ...], ...]}}}
+
+The optional keys are what the page's solid 3D view extrudes (scripts/obj_to_floorplan.py says what each holds):
+heights are metres above the floor (OBJ Y, unchanged by the placement); points move like the rest of the plan.
 
 Public API:
     load_plan(path)                -> dict: the plan file, validated (ValueError if unusable, OSError if unreadable)
@@ -32,6 +37,7 @@ FORMAT = "csi-floorplan"
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DECIMALS = 2            # room metres are rounded to the centimetre
 LINE_KEYS = ("segments", "mesh")
+POLYGON_KEYS = ("fills", "outline")
 
 
 def plan_path(file: Union[str, Path]) -> Path:
@@ -63,13 +69,35 @@ def load_plan(path: Union[str, Path]) -> dict:
         for key in LINE_KEYS:
             if len(_numbers(group.get(key, []), f"{path}: group {name!r} {key}")) % 4:
                 raise ValueError(f"{path}: group {name!r} {key} must hold x0, y0, x1, y1 per line")
-        fills = group.get("fills", [])
-        if not isinstance(fills, list):
-            raise ValueError(f"{path}: group {name!r} fills must be a list of polygons")
-        for poly in fills:
-            if len(_numbers(poly, f"{path}: group {name!r} fill")) < 6 or len(poly) % 2:
-                raise ValueError(f"{path}: group {name!r} fills need at least 3 x, y points each")
+        for key in POLYGON_KEYS:
+            polys = group.get(key, [])
+            if not isinstance(polys, list):
+                raise ValueError(f"{path}: group {name!r} {key} must be a list of polygons")
+            for poly in polys:
+                if len(_numbers(poly, f"{path}: group {name!r} {key}")) < 6 or len(poly) % 2:
+                    raise ValueError(f"{path}: group {name!r} {key} need at least 3 x, y points each")
+        if "height" in group:
+            _height(group["height"], f"{path}: group {name!r} height")
+        bands = group.get("bands", [])
+        if not isinstance(bands, list) or not all(isinstance(b, dict) for b in bands):
+            raise ValueError(f"{path}: group {name!r} bands must be a list of objects")
+        for band in bands:
+            _height(band.get("height"), f"{path}: group {name!r} band height")
+            if len(_numbers(band.get("segments", []), f"{path}: group {name!r} band segments")) % 4:
+                raise ValueError(f"{path}: group {name!r} band segments must hold x0, y0, x1, y1 per line")
+        stairs = group.get("steps", [])
+        if not isinstance(stairs, list):
+            raise ValueError(f"{path}: group {name!r} steps must be a list")
+        for step in stairs:
+            if len(_numbers(step, f"{path}: group {name!r} step")) < 7 or len(step) % 2 == 0:
+                raise ValueError(f"{path}: group {name!r} steps need a height and at least 3 x, y points each")
     return plan
+
+
+def _height(value, what: str) -> list:
+    if len(_numbers(value, what)) != 2 or value[0] > value[1]:
+        raise ValueError(f"{what} must be [low, high]")
+    return value
 
 
 def to_room(x_m: float, y_m: float, placement) -> tuple[float, float]:
@@ -88,6 +116,11 @@ def _flat(values, placement) -> list[float]:
     return out
 
 
+def _metres(values) -> list[float]:
+    """Heights in centimetres as metres (heights are not moved by the placement)."""
+    return [round(v / 100.0, DECIMALS) for v in values]
+
+
 def room_plan(plan: dict, placement) -> dict:
     """The plan's groups in room coordinates (metres) for ``placement`` (csi/room.py FloorPlan), with their bounds."""
     groups = {}
@@ -97,8 +130,16 @@ def room_plan(plan: dict, placement) -> dict:
         for key in LINE_KEYS:
             if group.get(key):
                 out[key] = _flat(group[key], placement)
-        if group.get("fills"):
-            out["fills"] = [_flat(poly, placement) for poly in group["fills"]]
+        for key in POLYGON_KEYS:
+            if group.get(key):
+                out[key] = [_flat(poly, placement) for poly in group[key]]
+        if "height" in group:
+            out["height"] = _metres(group["height"])
+        if group.get("bands"):
+            out["bands"] = [{"height": _metres(b["height"]), "segments": _flat(b.get("segments", []), placement)}
+                            for b in group["bands"]]
+        if group.get("steps"):
+            out["steps"] = [_metres(step[:1]) + _flat(step[1:], placement) for step in group["steps"]]
         for key in LINE_KEYS:
             xs.extend(out.get(key, [])[0::2])
             ys.extend(out.get(key, [])[1::2])

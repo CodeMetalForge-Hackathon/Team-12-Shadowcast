@@ -1,8 +1,8 @@
 # Floor plans
 
-Building plans the dashboard can draw under the heat map (`GET /api/floorplan`, the map's "Floor plan" layer and its
-"Whole floor" view). A room config uses one through `"floor_plan"` (see `csi/room.py` and
-`config/examples/basex_room.json`).
+Building plans for the dashboard's 3D view (`GET /api/floorplan`; the page's "Map / 3D" switch): the whole floor as
+a solid, shaded model, extruded from the plan, with the room, its pucks and the heat raised in it. The 2D map shows the
+room alone. A room config uses one through `"floor_plan"` (see `csi/room.py` and `config/examples/basex_room.json`).
 
 ## basex_floor14.json
 
@@ -20,6 +20,12 @@ walls.
 The plan is in integer centimetres: plan x = OBJ X (east), plan y = OBJ Z (south), so north is up on screen. The slabs
 and the lobby ceiling are irregular triangle meshes (about 27 cm edges, 101 k distinct edges for the floor slab), so
 the plan keeps their outline and a decimated 1 m wireframe of the mesh. The ceiling slab coincides with the floor
-slab in plan and adds nothing. To rebuild it:
+slab in plan and adds nothing.
+
+For the 3D view every group also carries its height (the lowest and highest OBJ Y of its edges), the slab its
+outline as a closed ring, the spandrels their two bands (under and over the glass) as separate lines, and the stairs
+their steps (per tread level, the convex hull of each tread). The page extrudes these into solids (walls and facade
+as thin boxes on their plan lines, glass as translucent panels, columns and steps as prisms, the slab triangulated);
+it never draws the OBJ's edges and leaves the ceilings out. To rebuild it:
 
     python3 -I scripts/obj_to_floorplan.py path/to/basex_floor14_mesh_overlay.obj config/floorplans/basex_floor14.json

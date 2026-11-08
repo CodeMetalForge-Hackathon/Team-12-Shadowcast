@@ -1,6 +1,6 @@
 {
   "comment": "Planning example, not a rig: an 8 x 6 m room on BASE-X floor 14 (60 State Street, Boston), placed on the building plan in the clear east wing of the open floor, about 2 m east of the column line at plan x = 37 m and 1 m inside the east facade. All six pucks sit inside the room, about 0.3 m in from the walls: receivers along the north and west walls, senders along the south and east walls, so every link crosses the room. x runs left to right (east), y top to bottom (south), metres, origin at the room's top-left (north-west) corner.",
-  "floor_plan_note": "To move the room on the plan, change floor_plan.origin_m: the plan point (east, south) in metres where the room's top-left corner sits (the OBJ frame: x east, y = OBJ Z, so north is negative). rotation_deg turns the room's axes clockwise as seen on the north-up plan. Check the result in the dashboard's whole-floor view.",
+  "floor_plan_note": "To move the room on the plan, change floor_plan.origin_m: the plan point (east, south) in metres where the room's top-left corner sits (the OBJ frame: x east, y = OBJ Z, so north is negative). rotation_deg turns the room's axes clockwise as seen on the north-up plan. Check the result in the dashboard's 3D view.",
   "room": {
     "width_m": 8.0,
     "depth_m": 6.0

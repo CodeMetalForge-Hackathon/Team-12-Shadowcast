@@ -106,6 +106,95 @@ def test_the_converter_writes_a_plan_the_loader_reads(tmp_path):
     assert "OBJ header" in plan["source"]
 
 
+def write_obj_3d(path: Path) -> Path:
+    """A tiny overlay for the 3D keys: a spandrel strip under the glass (0 to 0.35 m) and one over it (2.75 to
+    3.66 m) on the same plan line, and a stair of two 1 x 0.3 m treads at 0.16 m and 0.32 m (the floor-level edges
+    of its footprint too)."""
+    lines, vertices = ["# tiny 3D overlay. Units: metres. Y up.", "g mesh_overlay_facade_spandrels"], []
+
+    def v(x, y, z):
+        vertices.append((x, y, z))
+        lines.append(f"v {x:.3f} {y:.3f} {z:.3f}")
+        return len(vertices)
+
+    def rect(x0, z0, x1, z1, y):
+        ids = [v(x0, y, z0), v(x1, y, z0), v(x1, y, z1), v(x0, y, z1)]
+        lines.extend(f"l {ids[i]} {ids[(i + 1) % 4]}" for i in range(4))
+
+    for lo, hi in ((0.0, 0.35), (2.75, 3.66)):
+        a, b, c, d = v(0.0, lo, 0.0), v(1.0, lo, 0.0), v(1.0, hi, 0.0), v(0.0, hi, 0.0)
+        lines += [f"l {a} {b}", f"l {b} {c}", f"l {c} {d}", f"l {d} {a}", f"l {a} {c}"]
+    lines += ["g mesh_overlay_core_stairs"]
+    rect(5.0, 0.0, 6.0, -0.6, 0.0)             # the flight's footprint on the floor: no step
+    rect(5.0, 0.0, 6.0, -0.3, 0.16)
+    rect(5.0, -0.3, 6.0, -0.6, 0.32)
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
+def test_the_converter_adds_what_the_3d_view_extrudes_heights_bands_outline_and_steps(tmp_path):
+    mod = converter()
+    groups = mod.convert(write_obj(tmp_path / "tiny.obj"), "tiny")["groups"]
+    # each group's vertical extent in cm, from its edges' OBJ Y (the slab is 15 cm thick, under the floor)
+    assert groups["floor_slab_L14"]["height"] == [-15, 0] and groups["ceiling_slab_L15"]["height"] == [355, 370]
+    assert groups["core_walls"]["height"] == [0, 200] and groups["columns"]["height"] == [0, 0]
+    # the slab's outline as one closed ring (its four corners), for a triangulated slab; no bands for one band
+    ring = groups["floor_slab_L14"]["outline"]
+    assert len(ring) == 1 and sorted(zip(ring[0][0::2], ring[0][1::2])) == [(0, -200), (0, 0), (200, -200), (200, 0)]
+    assert "bands" not in groups["core_walls"] and "outline" not in groups["core_walls"]
+
+    groups = mod.convert(write_obj_3d(tmp_path / "tiny3d.obj"), "tiny3d")["groups"]
+    spandrels = groups["facade_spandrels"]
+    assert spandrels["height"] == [0, 366]
+    # two bands on one plan line: each band its own lines, so the 3D view leaves the glass between them open
+    assert spandrels["bands"] == [{"height": [0, 35], "segments": [0, 0, 100, 0]},
+                                  {"height": [275, 366], "segments": [0, 0, 100, 0]}]
+    steps = groups["core_stairs"]["steps"]
+    assert [s[0] for s in steps] == [16, 32]                                 # the floor-level edges are no step
+    assert sorted(zip(steps[0][1::2], steps[0][2::2])) == [(500, -30), (500, 0), (600, -30), (600, 0)]
+    assert sorted(zip(steps[1][1::2], steps[1][2::2])) == [(500, -60), (500, -30), (600, -60), (600, -30)]
+
+
+def test_room_plan_moves_the_3d_keys_heights_stay_in_metres_above_the_floor():
+    plan = {"format": "csi-floorplan", "version": 1, "units": "cm", "groups": {
+        "floor_slab_L14": {"kind": "slab", "height": [-15, 0], "segments": [100, 200, 500, 200],
+                           "outline": [[100, 200, 500, 200, 500, 600]]},
+        "facade_spandrels": {"kind": "facade", "height": [0, 366], "segments": [100, 200, 300, 200],
+                             "bands": [{"height": [0, 35], "segments": [100, 200, 300, 200]}]},
+        "core_stairs": {"kind": "stair", "height": [0, 191], "segments": [],
+                        "steps": [[16, 100, 200, 200, 200, 200, 300]]},
+    }}
+    groups = room_plan(plan, FloorPlan("p.json", (1.0, 2.0), 0.0))["groups"]
+    assert groups["floor_slab_L14"]["height"] == [-0.15, 0.0]
+    assert groups["floor_slab_L14"]["outline"] == [[0.0, 0.0, 4.0, 0.0, 4.0, 4.0]]
+    assert groups["facade_spandrels"]["bands"] == [{"height": [0.0, 0.35], "segments": [0.0, 0.0, 2.0, 0.0]}]
+    assert groups["core_stairs"]["steps"] == [[0.16, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0]]
+
+
+@pytest.mark.parametrize("group", [
+    {"kind": "core", "height": [200, 100]},
+    {"kind": "core", "height": [0]},
+    {"kind": "facade", "bands": [{"height": [0, 35], "segments": [0, 0, 100]}]},
+    {"kind": "slab", "outline": [[0, 0, 100, 0]]},
+    {"kind": "stair", "steps": [[16, 0, 0, 100, 0, 100, 100, 5]]},
+])
+def test_a_plan_with_unusable_3d_keys_is_refused(tmp_path, group):
+    path = tmp_path / "bad.json"
+    path.write_text(json.dumps({"format": "csi-floorplan", "units": "cm", "groups": {"g": group}}))
+    with pytest.raises(ValueError):
+        load_plan(path)
+
+
+def test_the_committed_basex_plan_carries_the_3d_keys():
+    plan = load_plan(ROOT / "config" / "floorplans" / "basex_floor14.json")
+    groups = plan["groups"]
+    assert all("height" in g for g in groups.values())
+    assert len(groups["floor_slab_L14"]["outline"]) == 1 and len(groups["floor_slab_L14"]["outline"][0]) >= 8
+    assert [b["height"] for b in groups["facade_spandrels"]["bands"]] == [[0, 35], [275, 366]]
+    assert groups["core_stairs"]["steps"] and groups["columns"]["fills"]
+    assert (ROOT / "config" / "floorplans" / "basex_floor14.json").stat().st_size < 1_000_000
+
+
 def test_the_converter_refuses_an_obj_with_a_bad_vertex_reference(tmp_path):
     mod = converter()
     bad = tmp_path / "bad.obj"

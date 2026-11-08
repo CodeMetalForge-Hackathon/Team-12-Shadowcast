@@ -32,11 +32,23 @@ decimated wireframe of the mesh ("mesh"): vertex clustering on a MESH_CELL_CM gr
 the cell centre standing for the cell, an edge between two cells wherever the mesh has one, and of two crossing
 diagonals in a 2 x 2 block only the shorter kept.
 
+For the dashboard's solid 3D view, which extrudes the plan (it never draws edges), each group also carries:
+
+    height    [y0, y1]: its vertical extent, the lowest and highest OBJ Y of its edges (plan lines and fills span it)
+    bands     only for a group whose edges sit in separate vertical bands (the spandrels: under the glass and over
+              it): [{"height": [y0, y1], "segments": [...]}, ...], each band's own plan lines, merged per band
+    outline   slabs and the lobby ceiling: their outline as closed rings [[x, y, ...], ...] (the merged boundary
+              lines chained end to end), for a triangulated slab
+    steps     stairs: [[h, x, y, ...], ...], per level h of the treads (their horizontal edges) the convex hull of
+              each connected piece, so the page can stack solid steps from the floor up to h
+
 Output (JSON, integers in centimetres):
 
     {"format": "csi-floorplan", "version": 1, "name", "source", "units": "cm", "frame", "bounds": [x0, y0, x1, y1],
-     "groups": {name: {"kind", "segments": [x0, y0, x1, y1, ...], "mesh"?: [...], "fills"?: [[x, y, ...], ...]}},
-     "stats": {name: {"obj_segments", "vertical", "unique", "segments", "mesh", "fills"}}}
+     "groups": {name: {"kind", "height": [y0, y1], "segments": [x0, y0, x1, y1, ...], "mesh"?: [...],
+                       "fills"?: [[x, y, ...], ...], "bands"?: [...], "outline"?: [[x, y, ...], ...],
+                       "steps"?: [[h, x, y, ...], ...]}},
+     "stats": {name: {"obj_segments", "vertical", "unique", "segments", "mesh", "fills", "bands", "steps"}}}
 
 Standard library only.
 """
@@ -76,6 +88,9 @@ OFFSET_GAP_CM = 1.0         # merge: carrier lines this close count as one
 JOIN_GAP_CM = 1.0           # merge: pieces of one line this close (or overlapping) join
 MAX_DEV_CM = 1.5            # merge: every merged piece lies this close to the merged line, else the run is split
 MESH_CELL_CM = 100          # decimated wireframe: vertex-clustering cell size
+BAND_GAP_CM = 2             # 3D: edge heights this close belong to one vertical band
+RING_SNAP_CM = 3            # 3D: outline line ends this close are one corner of the ring
+LEVEL_CM = 2                # 3D: tread levels this close are one step
 
 
 class ObjError(ValueError):
@@ -98,14 +113,20 @@ def _index(ref: str, count: int, lineno: int) -> int:
     return j
 
 
-def parse_obj(path: Path, keep=GROUPS):
+def parse_obj(path: Path, keep=GROUPS, tall=None):
     """Stream the OBJ. Returns (header comment lines, per kept group: {cm key: segment in cm as floats},
-    per group raw 'l' segment counts, per kept group vertical (dropped) counts)."""
-    xs, zs = array("d"), array("d")
+    per group raw 'l' segment counts, per kept group vertical (dropped) counts, and the heights: per kept group
+    {"range": [y0, y1] cm, "intervals": {(y0, y1) cm of each edge}, "keys": {cm key: {its edges' (y0, y1)}} (not for
+    the slabs), "levels": {tread level cm: {cm keys}} (stairs only)})."""
+    if tall is None:
+        tall = {g for g, k in keep.items() if k not in SURFACE_KINDS}
+    xs, ys, zs = array("d"), array("d"), array("d")
     header: list[str] = []
     segs: dict[str, dict] = defaultdict(dict)
     raw: dict[str, int] = defaultdict(int)
     vertical: dict[str, int] = defaultdict(int)
+    heights: dict[str, dict] = defaultdict(lambda: {"range": None, "intervals": set(), "keys": defaultdict(set),
+                                                     "levels": defaultdict(set)})
     group = None
     seen_geometry = False
     with open(path, encoding="utf-8", errors="replace") as f:
@@ -114,12 +135,13 @@ def parse_obj(path: Path, keep=GROUPS):
                 seen_geometry = True
                 parts = line.split()
                 try:
-                    x, z = float(parts[1]), float(parts[3])
+                    x, y, z = float(parts[1]), float(parts[2]), float(parts[3])
                 except (IndexError, ValueError):
                     raise ObjError(f"line {lineno}: bad vertex {line.strip()[:60]!r}") from None
-                if not (math.isfinite(x) and math.isfinite(z)):
+                if not (math.isfinite(x) and math.isfinite(y) and math.isfinite(z)):
                     raise ObjError(f"line {lineno}: vertex is not finite")
                 xs.append(x)
+                ys.append(y)
                 zs.append(z)
             elif line.startswith("l "):
                 seen_geometry = True
@@ -129,8 +151,12 @@ def parse_obj(path: Path, keep=GROUPS):
                     continue
                 idx = [_index(r, len(xs), lineno) for r in refs]
                 bucket = segs[group]
+                h = heights[group]
                 for a, b in zip(idx, idx[1:]):
                     ax, az, bx, bz = xs[a], zs[a], xs[b], zs[b]
+                    lo, hi = _cm(min(ys[a], ys[b])), _cm(max(ys[a], ys[b]))
+                    h["range"] = [lo, hi] if h["range"] is None else [min(h["range"][0], lo), max(h["range"][1], hi)]
+                    h["intervals"].add((lo, hi))
                     if math.hypot(bx - ax, bz - az) < MIN_PLAN_M:
                         vertical[group] += 1
                         continue
@@ -141,12 +167,16 @@ def parse_obj(path: Path, keep=GROUPS):
                     key = (p, q) if p <= q else (q, p)
                     if key not in bucket:
                         bucket[key] = (ax * 100.0, az * 100.0, bx * 100.0, bz * 100.0)
+                    if group in tall:
+                        h["keys"][key].add((lo, hi))
+                    if keep[group] == "stair" and hi - lo < 1:
+                        h["levels"][_cm((ys[a] + ys[b]) / 2.0)].add(key)
             elif line.startswith(("g ", "o ")) or line.strip() in ("g", "o"):
                 name = line[1:].strip()
                 group = name[len(GROUP_PREFIX):] if name.startswith(GROUP_PREFIX) else name
             elif line.startswith("#") and not seen_geometry:
                 header.append(line[1:].strip())
-    return header, segs, raw, vertical
+    return header, segs, raw, vertical, heights
 
 
 # ------------------------------------------------------------------ merging collinear segments
@@ -353,10 +383,84 @@ def component_hulls(keys):
     return sorted(hulls)
 
 
+# ------------------------------------------------------------------ 3D: bands, outline rings, steps
+
+def bands(intervals, gap=BAND_GAP_CM):
+    """The vertical bands of a group: its edges' (y0, y1) intervals merged where they overlap or come within
+    ``gap``. Returns sorted [y0, y1] lists."""
+    out = []
+    for lo, hi in sorted(intervals):
+        if out and lo <= out[-1][1] + gap:
+            out[-1][1] = max(out[-1][1], hi)
+        else:
+            out.append([lo, hi])
+    return out
+
+
+def rings(lines, snap=RING_SNAP_CM):
+    """Closed rings from outline lines (x0, y0, x1, y1): line ends within ``snap`` are one corner; each ring is
+    walked line by line until it closes. Returns flat [x, y, ...] lists of 3 or more corners."""
+    ends = [pt for ln in lines for pt in ((ln[0], ln[1]), (ln[2], ln[3]))]
+    corner = list(range(len(ends)))
+
+    def find(i):
+        while corner[i] != i:
+            corner[i] = corner[corner[i]]
+            i = corner[i]
+        return i
+
+    for i in range(len(ends)):
+        for j in range(i):
+            if math.dist(ends[i], ends[j]) <= snap:
+                corner[find(i)] = find(j)
+    at = defaultdict(list)          # corner -> [(line, its other corner)]
+    for n in range(len(lines)):
+        a, b = find(2 * n), find(2 * n + 1)
+        if a != b:
+            at[a].append((n, b))
+            at[b].append((n, a))
+    used, out = set(), []
+    for start in sorted(at):
+        for n, nxt in at[start]:
+            if n in used:
+                continue
+            used.add(n)
+            ring, here = [start], nxt
+            while here != start:
+                ring.append(here)
+                step = next(((m, o) for m, o in at[here] if m not in used), None)
+                if step is None:
+                    break
+                used.add(step[0])
+                here = step[1]
+            if here == start and len(ring) >= 3:
+                out.append([v for c in ring for v in ends[c]])
+    return sorted(out)
+
+
+def steps(levels, gap=LEVEL_CM):
+    """Solid steps of a stair: tread levels (cm) within ``gap`` of each other joined; per level, the convex hull of
+    each connected piece of its horizontal edges. Returns [h, x, y, ...] lists, the floor level left out."""
+    out, run, keys = [], None, set()
+
+    def flush():
+        if run is not None and run > gap:
+            out.extend([run] + hull for hull in component_hulls(keys))
+
+    for level in sorted(levels):
+        if run is not None and level - run > gap:
+            flush()
+            run, keys = None, set()
+        run = level if run is None else max(run, level)
+        keys |= levels[level]
+    flush()
+    return out
+
+
 # ------------------------------------------------------------------ the plan
 
 def convert(path: Path, name: str = "") -> dict:
-    header, segs, raw, vertical = parse_obj(path)
+    header, segs, raw, vertical, heights = parse_obj(path)
     groups, stats = {}, {}
     for group, kind in GROUPS.items():
         bucket = segs.get(group, {})
@@ -365,6 +469,9 @@ def convert(path: Path, name: str = "") -> dict:
         if base is not None:
             keys -= set(segs.get(base, {}))
         entry = {"kind": kind}
+        h = heights.get(group)
+        if h is not None and h["range"] is not None:
+            entry["height"] = list(h["range"])
         mesh = []
         if kind in SURFACE_KINDS and base is None:
             boundary = outline_keys(keys)
@@ -377,10 +484,23 @@ def convert(path: Path, name: str = "") -> dict:
             entry["mesh"] = [v for s in mesh for v in s]
         if kind == "column":
             entry["fills"] = component_hulls(keys)
+        if h is not None and kind not in SURFACE_KINDS:
+            spans = bands(h["intervals"])
+            if len(spans) > 1:      # separate bands: each band's own lines, merged on their own
+                entry["bands"] = []
+                for lo, hi in spans:
+                    mine = [k for k in keys if any(lo <= a and b <= hi for a, b in h["keys"].get(k, ()))]
+                    band_lines = merge_collinear(bucket[k] for k in mine)
+                    entry["bands"].append({"height": [lo, hi], "segments": [v for s in band_lines for v in s]})
+        if kind in SURFACE_KINDS and base is None and lines:
+            entry["outline"] = rings(lines)
+        if kind == "stair" and h is not None:
+            entry["steps"] = steps(h["levels"])
         groups[group] = entry
         stats[group] = {"obj_segments": raw.get(group, 0), "vertical": vertical.get(group, 0),
                         "unique": len(keys), "segments": len(lines), "mesh": len(mesh),
-                        "fills": len(entry.get("fills", []))}
+                        "fills": len(entry.get("fills", [])), "bands": len(entry.get("bands", [])),
+                        "steps": len(entry.get("steps", []))}
     skipped = {g: n for g, n in raw.items() if g not in GROUPS}
     xs = [v for e in groups.values() for k in ("segments", "mesh") for v in e.get(k, [])[0::2]]
     ys = [v for e in groups.values() for k in ("segments", "mesh") for v in e.get(k, [])[1::2]]
@@ -432,10 +552,11 @@ def main(argv=None) -> int:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(text, encoding="utf-8")
     print(f"wrote {args.output} ({len(text.encode())} bytes), bounds {plan['bounds']} cm")
-    print(f"{'group':24} {'obj':>7} {'vert':>6} {'unique':>7} {'lines':>6} {'mesh':>6} {'fills':>5}")
+    print(f"{'group':24} {'obj':>7} {'vert':>6} {'unique':>7} {'lines':>6} {'mesh':>6} {'fills':>5} {'bands':>5} "
+          f"{'steps':>5}  height cm")
     for g, s in plan["stats"].items():
         print(f"{g:24} {s['obj_segments']:7} {s['vertical']:6} {s['unique']:7} {s['segments']:6} {s['mesh']:6} "
-              f"{s['fills']:5}")
+              f"{s['fills']:5} {s['bands']:5} {s['steps']:5}  {plan['groups'][g].get('height')}")
     for g, n in plan["skipped"].items():
         print(f"skipped {g}: {n} segments")
     return 0
