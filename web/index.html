@@ -737,6 +737,12 @@
           <input type="checkbox" id="track-show" checked> Person track</label>
         <label class="toggle" title="Blind spots from the puck positions: cells fewer than 3 links cross">
           <input type="checkbox" id="layer-coverage"> Coverage</label>
+        <label class="toggle" id="plan-toggle" title="The building's floor plan round the room" hidden>
+          <input type="checkbox" id="layer-plan" checked> Floor plan</label>
+      </div>
+      <div class="seg" id="plan-views" role="group" aria-label="Map view" hidden>
+        <button type="button" id="view-room" aria-pressed="true">Room</button>
+        <button type="button" id="view-floor" aria-pressed="false">Whole floor</button>
       </div>
     </div>
     <canvas id="map" role="img"
@@ -1040,7 +1046,8 @@
     counts: $("link-counts"), sortAttention: $("sort-attention"), sortName: $("sort-name"), links: $("links"),
     pucks: $("pucks"), pucksSummary: $("pucks-summary"), controls: $("controls"), drawerClose: $("drawer-close")
   };
-  var LAYER_INPUTS = { heat: "layer-heat", links: "layer-links", track: "track-show", coverage: "layer-coverage" };
+  var LAYER_INPUTS = { heat: "layer-heat", links: "layer-links", track: "track-show", coverage: "layer-coverage",
+    plan: "layer-plan" };
   var ctx = els.map.getContext("2d");
   var heatCanvas = document.createElement("canvas");
   var heatCtx = heatCanvas.getContext("2d");
@@ -1072,7 +1079,7 @@
   var puckOrder = null;
   var known = { room: null, nodes: [] };   // the last room and nodes, for a frame without them
   var coverage = { key: null };
-  var layers = { heat: true, links: true, track: true, coverage: false };
+  var layers = { heat: true, links: true, track: true, coverage: false, plan: true };
   var demo = false;
   var drawerOpen = false;
   var sortMode = "attention";
@@ -1436,7 +1443,7 @@
       ".";
   }
 
-  function mapScale() { return demo ? 1.25 : 1; }
+  function mapScale() { return (demo ? 1.25 : 1) * (planView && plan ? 0.6 : 1); }   // smaller on the whole floor
   function setFonts() {   // the page's type scale: 14 px labels, 12 px (11.67) small text
     var k = mapScale();
     labelFont = "600 " + Math.round(14 * k) + "px " + FONT_FAMILY;
@@ -1682,6 +1689,7 @@
 
   // a block of text lines on a dark plate, kept on the canvas whatever side it was put on; border: a callout
   function labelBlock(lines, x, y, hAlign, vAlign, colour, border) {
+    if (planView && plan) return;   // the whole floor: no labels over the small room
     var k = mapScale(), lineH = Math.round(16 * k), pad = Math.round(5 * k);
     ctx.save();
     ctx.textAlign = "left";
@@ -1982,11 +1990,139 @@
     });
   }
 
+  // ------------------------------------------------------------------ floor plan (GET /api/floorplan)
+  // The building's floor plan round the room, in room metres (csi/floorplan.py), fetched once at start; null without
+  // one (404: no "floor_plan" in the room config, a log replay, an older server). It is drawn into its own offscreen
+  // layer, rebuilt only when the map's size, frame or theme or the plan change, and laid over the heat after drawHeat,
+  // so the heat itself is untouched. "Whole floor" fits the frame to the plan; the room, pucks, links, heat and track
+  // stay where they are.
+  var plan = null;
+  var planView = false;           // false: the room view; true: the whole floor
+  var planCanvas = document.createElement("canvas");
+  var planCtx = planCanvas.getContext("2d");
+  var planKey = null;             // what the layer on planCanvas was drawn for
+  // by group kind, faintest first: palette colour, alpha, line width (css px). "mesh" is every group's decimated
+  // wireframe of the slab and ceiling meshes; the columns are also filled.
+  var PLAN_STYLE = [
+    { kind: "mesh", color: "wall", alpha: 0.2, width: 0.75 },
+    { kind: "ceiling", color: "wall", alpha: 0.4, width: 1 },
+    { kind: "door", color: "wall", alpha: 0.55, width: 1 },
+    { kind: "stair", color: "wall", alpha: 0.55, width: 1 },
+    { kind: "slab", color: "wall", alpha: 0.85, width: 1 },
+    { kind: "facade", color: "outline", alpha: 0.6, width: 1 },
+    { kind: "core", color: "outline", alpha: 0.6, width: 1 },
+    { kind: "column", color: "outline", alpha: 0.7, width: 1 }
+  ];
+
+  function planNumbers(v) {
+    return Array.isArray(v) && v.every(function (n) { return Number.isFinite(n); }) ? v : null;
+  }
+  function validPlan(j) {
+    var b = j && typeof j === "object" ? planNumbers(j.bounds) : null;
+    if (!b || b.length !== 4 || !(b[2] > b[0]) || !(b[3] > b[1]) || !j.groups || typeof j.groups !== "object") {
+      return null;
+    }
+    var groups = Object.keys(j.groups).map(function (name) {
+      var g = j.groups[name] || {};
+      return {
+        kind: String(g.kind || ""), segments: planNumbers(g.segments) || [], mesh: planNumbers(g.mesh) || [],
+        fills: (Array.isArray(g.fills) ? g.fills : []).filter(function (f) { return planNumbers(f) && f.length >= 6; })
+      };
+    });
+    return { bounds: { x0: b[0], y0: b[1], x1: b[2], y1: b[3] }, groups: groups };
+  }
+  function setPlan(next) {
+    plan = next;
+    planKey = null;
+    $("plan-toggle").hidden = !plan;
+    $("plan-views").hidden = !plan;
+    if (!plan && planView) setPlanView(false); else redraw();
+  }
+  function setPlanView(on) {
+    planView = !!on && !!plan;
+    $("view-room").setAttribute("aria-pressed", String(!planView));
+    $("view-floor").setAttribute("aria-pressed", String(planView));
+    redraw();
+  }
+  function startPlan() {
+    $("view-room").addEventListener("click", function () { setPlanView(false); });
+    $("view-floor").addEventListener("click", function () { setPlanView(true); });
+    try {
+      fetch("/api/floorplan", { cache: "no-store" })
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (j) { setPlan(validPlan(j)); }, function () { /* no plan: the map stays as it is */ });
+    } catch (err) { /* no fetch */ }
+  }
+  // the whole-floor frame: the plan, the room and its nodes, plus the margin
+  function planFrame(room, nodes) {
+    var b = mapBounds(room, nodes), pb = plan.bounds, m = MAP_MARGIN_M;
+    return { x0: Math.min(b.x0, pb.x0 - m), y0: Math.min(b.y0, pb.y0 - m),
+      x1: Math.max(b.x1, pb.x1 + m), y1: Math.max(b.y1, pb.y1 + m) };
+  }
+  function addPlanLines(c, v, g) {
+    for (var i = 0; i + 3 < v.length; i += 4) {
+      var x0 = g.X(v[i]), y0 = g.Y(v[i + 1]), x1 = g.X(v[i + 2]), y1 = g.Y(v[i + 3]);
+      if (Math.abs(x1 - x0) < 0.5) x0 = x1 = crisp((x0 + x1) / 2);   // walls along the axes on whole pixels
+      if (Math.abs(y1 - y0) < 0.5) y0 = y1 = crisp((y0 + y1) / 2);
+      c.moveTo(x0, y0);
+      c.lineTo(x1, y1);
+    }
+  }
+  function buildPlanLayer(g) {
+    var c = planCtx;
+    planCanvas.width = els.map.width;
+    planCanvas.height = els.map.height;
+    c.setTransform(sized.dpr || 1, 0, 0, sized.dpr || 1, 0, 0);
+    c.clearRect(0, 0, g.W, g.H);
+    PLAN_STYLE.forEach(function (st) {
+      c.globalAlpha = st.alpha;
+      c.strokeStyle = c.fillStyle = PAL[st.color];
+      c.lineWidth = st.width;
+      c.beginPath();
+      plan.groups.forEach(function (grp) {
+        if (st.kind === "mesh") addPlanLines(c, grp.mesh, g);
+        else if (grp.kind === st.kind) addPlanLines(c, grp.segments, g);
+      });
+      c.stroke();
+      if (st.kind !== "column") return;
+      c.beginPath();
+      plan.groups.forEach(function (grp) {
+        if (grp.kind !== st.kind) return;
+        grp.fills.forEach(function (f) {
+          for (var i = 0; i + 1 < f.length; i += 2) {
+            if (i === 0) c.moveTo(g.X(f[i]), g.Y(f[i + 1])); else c.lineTo(g.X(f[i]), g.Y(f[i + 1]));
+          }
+          c.closePath();
+        });
+      });
+      c.fill();
+    });
+    c.globalAlpha = 1;
+  }
+  // the plan over the heat (the room view keeps it inside the frame, clear of the dimension lines)
+  function drawPlan(g) {
+    if (!plan || !layers.plan) return;
+    var key = [sized.w, sized.h, sized.dpr, g.X(0), g.Y(0), g.s, PAL.theme, PAL.wall, PAL.outline].join(" ");
+    if (planKey !== key) {
+      buildPlanLayer(g);
+      planKey = key;
+    }
+    ctx.save();
+    if (!planView) {
+      ctx.beginPath();
+      ctx.rect(g.X(g.b.x0), g.Y(g.b.y0), (g.b.x1 - g.b.x0) * g.s, (g.b.y1 - g.b.y0) * g.s);
+      ctx.clip();
+    }
+    ctx.drawImage(planCanvas, 0, 0, g.W, g.H);
+    ctx.restore();
+  }
+
   function drawMap(p) {
     var room = p.room;
     if (!room || !(room.width_m > 0) || !(room.depth_m > 0)) { drawWaiting("no room in this frame"); return; }
-    var frame = mapBounds(room, p.nodes);
+    var frame = planView && plan ? planFrame(room, p.nodes) : mapBounds(room, p.nodes);
     var g = sizeMap(room, frame);
+    if (planView && plan) frame = g.b = mapBounds(room, p.nodes);   // whole floor: dimensions and labels by the room
     view = g;
     hits = [];
     setFonts();
@@ -2001,6 +2137,7 @@
     ctx.fillStyle = PAL.floor;
     ctx.fillRect(g.rx0, g.ry0, g.rw, g.rh);
     if (layers.heat) drawHeat(p.heatmap, g);
+    drawPlan(g);
     if (layers.coverage) drawCoverage(coverageFor(p), g);
     drawGrid(room, g, step);
     drawRoomFrame(room, g, step);
@@ -2859,6 +2996,7 @@
       document.fonts.ready.then(function () { if (shown) drawMap(shown); else drawWaiting(); });
     }
   } catch (err) { /* no font loading API */ }
+  startPlan();
   start();
 })();
 </script>
