@@ -16,6 +16,13 @@ it. Without one the footprint is the room rectangle, and ``Room.footprint`` is (
 the room rectangle is stored as () too, so such a room behaves as one without). Keys the loader does not know are
 ignored.
 
+The optional top-level ``"floor_plan": {"file": "config/floorplans/basex_floor14.json", "origin_m": [X0, Z0],
+"rotation_deg": 0}`` places the room on a building floor plan (csi/floorplan.py, scripts/obj_to_floorplan.py): room
+coordinate (0, 0) sits at plan point (X0, Z0) in metres, and the room's x and y run along the plan's +x and +y (OBJ
++X east and +Z south), turned ``rotation_deg`` (default 0) clockwise as seen on the north-up plan. A relative
+``file`` is read from the repository root. Without the key the room has no plan (``Room.floor_plan`` is None);
+keys the placement does not know are ignored too.
+
 Public API:
     load_room(path)                  -> Room (receivers and senders by name; optional link_weights, footprint)
     Room.links()                     -> [(receiver Node, sender Node)] for every pair
@@ -24,6 +31,8 @@ Public API:
     Room.outline                     the footprint, or the room rectangle's corners when there is none
     Room.inside(x, y)                -> True inside the outline (or on its edge)
     parse_footprint(value, w, d)     -> validated polygon, () for the room rectangle; ValueError if unusable
+    parse_floor_plan(value)          -> FloorPlan placement from config; ValueError if unusable
+    Room.floor_plan                  the FloorPlan placement, or None
     point_in_polygon(x, y, polygon)  -> True inside or on the edge (even-odd rule)
     nearest_point_in_polygon(x, y, polygon) -> (x, y) if inside, else the nearest point of the edge
     inside_mask(points, polygon)     -> bool array: which rows of points (n, 2) lie inside
@@ -66,6 +75,14 @@ class Node:
 
 
 @dataclass(frozen=True)
+class FloorPlan:
+    """Where the room sits on a building floor plan: room (0, 0) at plan (origin_m), metres; see the module doc."""
+    file: str
+    origin_m: tuple[float, float]
+    rotation_deg: float = 0.0
+
+
+@dataclass(frozen=True)
 class Room:
     width_m: float
     depth_m: float
@@ -74,6 +91,7 @@ class Room:
     link_weights: Mapping[str, float] = field(default_factory=dict)  # link label -> weight (default 1.0)
     disabled: tuple[str, ...] = ()  # names of nodes with "enabled": false (not in receivers or senders)
     footprint: tuple[Point, ...] = ()  # the room's outline polygon, metres; () = the room rectangle
+    floor_plan: Optional[FloorPlan] = None  # where the room sits on a building floor plan, or None
 
     def __post_init__(self) -> None:
         # validated and stored as a tuple of (x, y) floats; the room rectangle itself becomes ()
@@ -118,6 +136,7 @@ def load_room(path: Union[str, Path] = DEFAULT_ROOM_PATH) -> Room:
                           spec.get("chip", ""), spec.get("serial", "")))
     width_m, depth_m = float(config["room"]["width_m"]), float(config["room"]["depth_m"])
     footprint = config.get("footprint")
+    floor_plan = config.get("floor_plan")
     return Room(
         width_m=width_m,
         depth_m=depth_m,
@@ -126,7 +145,31 @@ def load_room(path: Union[str, Path] = DEFAULT_ROOM_PATH) -> Room:
         link_weights={k: float(v) for k, v in config.get("link_weights", {}).items()},
         disabled=tuple(disabled),
         footprint=() if footprint is None else parse_footprint(footprint, width_m, depth_m),
+        floor_plan=None if floor_plan is None else parse_floor_plan(floor_plan),
     )
+
+
+def _finite_number(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def parse_floor_plan(value) -> FloorPlan:
+    """The room's placement on a floor plan from config: {"file": str, "origin_m": [x, y], "rotation_deg": number}.
+
+    ``rotation_deg`` is optional (0); other keys are ignored. Raises ValueError when a value has the wrong type.
+    """
+    if not isinstance(value, dict):
+        raise ValueError(f"floor_plan must be an object with file and origin_m, got {value!r}")
+    file = value.get("file")
+    if not isinstance(file, str) or not file.strip():
+        raise ValueError(f"floor_plan.file must be the plan's path as a non-empty string, got {file!r}")
+    origin = value.get("origin_m")
+    if not isinstance(origin, (list, tuple)) or len(origin) != 2 or not all(_finite_number(v) for v in origin):
+        raise ValueError(f"floor_plan.origin_m must be [x, y]: two finite numbers in metres, got {origin!r}")
+    rotation = value.get("rotation_deg", 0)
+    if not _finite_number(rotation):
+        raise ValueError(f"floor_plan.rotation_deg must be a finite number of degrees, got {rotation!r}")
+    return FloorPlan(file=file, origin_m=(float(origin[0]), float(origin[1])), rotation_deg=float(rotation))
 
 
 def rectangle(width_m: float, depth_m: float) -> tuple[Point, ...]:

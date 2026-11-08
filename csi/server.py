@@ -14,6 +14,9 @@ HTTP:
     GET /api/state     one payload: DashboardState.snapshot() plus the ``status`` extension below
     GET /api/events    text/event-stream; ``data: <payload json>`` at most ~5 Hz and a last event
                        (``status.finished`` true) when the sources finish; then the stream closes
+    GET /api/floorplan the room's building floor plan in room coordinates (csi/floorplan.py room_plan), read once
+                       at startup; 404 when the room has none (no "floor_plan" in its config, a log replay) or its
+                       file cannot be used (a warning on stderr at startup)
     anything else      404
 
 ``status`` extension (added to DashboardState's status block):
@@ -35,6 +38,7 @@ import ipaddress
 import itertools
 import json
 import math
+import sys
 import threading
 import time
 from collections import deque
@@ -46,6 +50,7 @@ from urllib.parse import urlsplit
 
 from .dashboard import DashboardState
 from .detect import LIVE_SCORER
+from .floorplan import room_plan_json
 from .live_calibration import CalibrationJob, RequestError, parse_request
 from .links import LinkId, calibrate_links, save_thresholds
 from .multisource import MultiSource
@@ -255,6 +260,12 @@ class _Handler(BaseHTTPRequestHandler):
             self._events(dash)
         elif path in ("/", "/index.html"):
             self._send(200, "text/html; charset=utf-8", dash.index_bytes())
+        elif path == "/api/floorplan":
+            plan = dash.floorplan_json()
+            if plan is None:
+                self._send(404, "text/plain; charset=utf-8", b"no floor plan for this room\n")
+            else:
+                self._send(200, "application/json; charset=utf-8", plan)
         else:
             view = dash.view(path)
             if view is None:
@@ -419,6 +430,10 @@ class FrameServer:
         """GET of a server-specific resource (none in the base server): None means not found."""
         return None
 
+    def floorplan_json(self) -> Optional[bytes]:
+        """GET /api/floorplan: the room's floor plan in room coordinates as JSON, or None (404) without one."""
+        return None
+
     def __enter__(self) -> "FrameServer":
         return self
 
@@ -504,6 +519,10 @@ class DashboardServer(FrameServer):
         self._last_mono: Optional[float] = None
         self._pump_thread: Optional[threading.Thread] = None
         self._pipeline_errors: dict[str, str] = {}
+        self._floorplan = _load_floorplan(room)
+
+    def floorplan_json(self) -> Optional[bytes]:
+        return self._floorplan
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -829,6 +848,18 @@ class DashboardServer(FrameServer):
         self._state.set_threshold(label, value)
         self._commands.append(f"threshold {label} = {value:.4g} (calibration)")
 
+
+
+def _load_floorplan(room: Room) -> Optional[bytes]:
+    """The room's floor plan for GET /api/floorplan, read once: None without one, or (with a warning) when its file
+    cannot be read or is not a plan, so a bad plan never stops the dashboard."""
+    if room.floor_plan is None:
+        return None
+    try:
+        return room_plan_json(room.floor_plan)
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        print(f"warning: floor plan {room.floor_plan.file!r} not served: {e}", file=sys.stderr, flush=True)
+        return None
 
 
 class _PipelineError(Exception):
