@@ -34,7 +34,7 @@
      duration below is a token; the map canvas reads its colours from these properties too, so it follows the theme.
      Neutrals carry a slight green cast (hue 162), the complement of the heat map's magma, which owns the warm half
      of the wheel: nothing else on the floor is purple, red-orange or yellow. Chalk is the lit ink (motion, raised
-     links, the person); Signal blue is the one accent (actions, focus, selection). The map floor colours are the
+     links); Signal blue is the one accent (actions, focus, selection). The map floor colours are the
      heat map's own and stay as they were. The header is a drawing title block: one ruled grid of fields, in the same
      line language as the floor plan below it. */
   :root {
@@ -57,7 +57,7 @@
     --accent-soft: rgba(128, 174, 221, 0.12);
     --on-accent: #0d1310;
     --focus: #80aedd;
-    --s-motion: #c4ccc7;        /* raised links: one step below the person's chalk */
+    --s-motion: #c4ccc7;        /* raised links: one step below the chalk */
     --s-empty: #7fbb93;         /* Sage */
     --s-warmup: #a2aca7;
     --s-uncal: #e0b76c;         /* Ochre */
@@ -82,11 +82,7 @@
     --puck-edge: #424a45;
     --rx: #dee5e1;
     --tx: #dee5e1;
-    --track: #f0f5f2;
-    --track-fill: rgba(240, 245, 242, 0.1);
-    --lost: #a2aca7;
     --busy: #e0b76c;
-    --support: #f0f5f2;
     --blind: #c9d1cc;
     --heat-ramp: linear-gradient(90deg, rgba(0, 0, 4, 0) 0%, rgb(87, 16, 110) 25%, rgb(188, 55, 84) 50%,
       rgb(249, 142, 9) 75%, rgb(252, 255, 164) 100%);
@@ -164,11 +160,7 @@
       --puck-edge: #808984;
       --rx: #1c2420;
       --tx: #1c2420;
-      --track: #181f1b;
-      --track-fill: rgba(24, 31, 27, 0.1);
-      --lost: #4e5853;
       --busy: #8a5f18;
-      --support: #181f1b;
       --blind: #4e5853;
       --heat-ramp: linear-gradient(90deg, rgba(255, 237, 160, 0) 0%, rgb(254, 178, 76) 25%, rgb(240, 59, 32) 50%,
         rgb(189, 0, 38) 75%, rgb(110, 0, 30) 100%);
@@ -220,11 +212,7 @@
     --puck-edge: #808984;
     --rx: #1c2420;
     --tx: #1c2420;
-    --track: #181f1b;
-    --track-fill: rgba(24, 31, 27, 0.1);
-    --lost: #4e5853;
     --busy: #8a5f18;
-    --support: #181f1b;
     --blind: #4e5853;
     --heat-ramp: linear-gradient(90deg, rgba(255, 237, 160, 0) 0%, rgb(254, 178, 76) 25%, rgb(240, 59, 32) 50%,
       rgb(189, 0, 38) 75%, rgb(110, 0, 30) 100%);
@@ -401,10 +389,6 @@
   .note::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 1px; }
   .busy-note { color: var(--warn-ink); }
   .busy-note::before { border: 1.5px solid var(--busy); border-radius: 50%; }
-  .track-note { color: var(--text); }
-  .track-note::before { background: var(--track); border-radius: 50%; }
-  .track-note.lost { color: var(--text-2); }
-  .track-note.lost::before { background: transparent; border: 1.5px dashed var(--lost); }
   .coverage-note { color: var(--text-2); font-weight: 400; }
   .coverage-note::before { background: repeating-linear-gradient(135deg, var(--blind) 0 1.5px, transparent 1.5px 4px); }
 
@@ -463,15 +447,10 @@
   .lg-halo {
     display: inline-block; flex: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--busy);
   }
-  .lg-trail { display: inline-block; flex: none; width: 20px; height: 3px; background: linear-gradient(90deg, transparent, var(--track)); }
   .lg-blind {
     display: inline-block; flex: none; width: 20px; height: 12px; border: 1px solid var(--line-2);
     background: repeating-linear-gradient(135deg, var(--blind) 0 1.5px, transparent 1.5px 5px);
   }
-  .ico { flex: none; width: 16px; height: 16px; }
-  .ico.track { color: var(--track); }
-  .ico.lost { color: var(--lost); }
-  .ico.support { color: var(--support); }
 
   /* ---- health column: pucks, then links, as two schedules (ruled rows, one column header) */
   .side { min-width: 0; background: var(--surface); border-left: 1px solid var(--line); }
@@ -733,15 +712,14 @@
     .caption-sub { grid-area: sub; padding-top: var(--s1); }
     .legend {
       grid-area: legend; gap: var(--s2) var(--s4);
-      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr) minmax(0, 1.2fr) minmax(0, 1.1fr);
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr) minmax(0, 1.1fr);
     }
     .lg-sub, .lg-group ul, .lg-group h3 { padding-left: 0; }
     .heat-bar, .heat-scale { margin-left: 0; }
     .lg-group:nth-child(1) { grid-area: 1 / 1; }
     .lg-group:nth-child(2) { grid-area: 1 / 2 / 3; }
-    .lg-group:nth-child(3) { grid-area: 1 / 3 / 3; }
-    .lg-group:nth-child(4) { grid-area: 2 / 1; }
-    .lg-group:nth-child(5) { grid-area: 1 / 4 / 3; }
+    .lg-group:nth-child(3) { grid-area: 2 / 1; }
+    .lg-group:nth-child(4) { grid-area: 1 / 3 / 3; }
     .toggle, .lg-group h3 { min-height: 24px; line-height: 24px; }
     .lg-group li { line-height: 16px; }
   }
@@ -861,7 +839,6 @@
     <div class="key-panel">
       <div class="notes">
         <p class="note busy-note" id="busy-note" role="status" hidden></p>
-        <p class="note track-note" id="track-note" hidden></p>
         <p class="note coverage-note" id="coverage-note" hidden></p>
       </div>
       <div class="legend" role="group" aria-label="Map layers and legend">
@@ -880,26 +857,6 @@
             <li><span class="lg-ln WARMUP"></span>Warmup</li>
             <li><span class="lg-ln UNCALIBRATED"></span>Uncalibrated</li>
             <li><span class="lg-ln NO_SIGNAL"></span>No signal</li>
-          </ul>
-        </div>
-        <div class="lg-group">
-          <label class="toggle" title="Show the person track">
-            <input type="checkbox" id="track-show" checked> Person track</label>
-          <ul>
-            <li><svg class="ico track" viewBox="0 0 24 24" aria-hidden="true">
-              <ellipse cx="12" cy="12" rx="10" ry="6" fill="currentColor" fill-opacity="0.12" stroke="currentColor"
-                stroke-width="1.5" transform="rotate(-25 12 12)"/>
-              <circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg>track and its 1&sigma; ellipse</li>
-            <li><span class="lg-trail"></span>trail, last 20 s</li>
-            <li><svg class="ico lost" viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.5"
-                stroke-dasharray="3 3"/>
-              <path d="M8 8l8 8M16 8l-8 8" stroke="currentColor" stroke-width="1.5"/>
-            </svg>last seen</li>
-            <li><svg class="ico support" viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5" stroke="currentColor" stroke-width="1.5"/>
-            </svg>where agreeing links cross</li>
           </ul>
         </div>
         <div class="lg-group">
@@ -1026,8 +983,6 @@
 
   var WINDOW_S = 30;            // sparkline history, in packet time
   var FULL_SCALE = 2;           // bars and sparklines run to this multiple of the threshold; the mark is at 1
-  var TRAIL_FADE_S = 20;        // the trail fades out over this many seconds (the tracker keeps 20 s)
-  var COASTING_S = 0.5;         // an active track unmeasured for longer than this is coasting: dashed ellipse
   var STATES = ["MOTION", "EMPTY", "WARMUP", "UNCALIBRATED", "NO_SIGNAL"];
   var STATE_TEXT = {
     MOTION: "MOTION", EMPTY: "EMPTY", WARMUP: "WARMUP", UNCALIBRATED: "UNCALIBRATED", NO_SIGNAL: "NO SIGNAL"
@@ -1056,11 +1011,6 @@
     if (s == null) return "none yet";
     if (s < 1) return "now";
     return s < 120 ? Math.round(s) + " s ago" : Math.round(s / 60) + " min ago";
-  }
-  // a length of time as text: seconds, then minutes
-  function duration(s) {
-    s = Math.max(0, s || 0);
-    return s < 120 ? Math.round(s) + " s" : Math.round(s / 60) + " min";
   }
   function el(tag, cls, text) {
     var node = document.createElement(tag);
@@ -1105,16 +1055,15 @@
     theme: "--theme", floor: "--map-floor", grid: "--map-grid", wall: "--map-wall", outline: "--map-outline",
     tick: "--map-tick", label: "--map-label", outside: "--map-outside", poche: "--map-poche", text: "--text",
     muted: "--muted", accent: "--accent", puck: "--puck", puckEdge: "--puck-edge", rx: "--rx", tx: "--tx",
-    track: "--track", trackFill: "--track-fill", lost: "--lost", busy: "--busy", support: "--support",
-    blind: "--blind", MOTION: "--s-motion", EMPTY: "--s-empty", WARMUP: "--s-warmup", UNCALIBRATED: "--s-uncal",
-    NO_SIGNAL: "--s-nosig", good: "--h-good", warn: "--h-warn", fail: "--h-fail", unknown: "--h-unknown"
+    busy: "--busy", blind: "--blind", MOTION: "--s-motion", EMPTY: "--s-empty", WARMUP: "--s-warmup",
+    UNCALIBRATED: "--s-uncal", NO_SIGNAL: "--s-nosig", good: "--h-good", warn: "--h-warn", fail: "--h-fail",
+    unknown: "--h-unknown"
   };
   var PAL_DARK = {
     theme: "dark", floor: "#05080c", grid: "rgba(169, 176, 172, 0.08)", wall: "#7a837e", outline: "#c9d1cc",
     tick: "#8a938e", label: "rgba(13, 19, 16, 0.88)", outside: "rgba(122, 131, 126, 0.14)", poche: "#29312d",
     text: "#dee5e1", muted: "#a2aca7", accent: "#80aedd", puck: "#131916", puckEdge: "#424a45", rx: "#dee5e1",
-    tx: "#dee5e1", track: "#f0f5f2", trackFill: "rgba(240, 245, 242, 0.1)", lost: "#a2aca7", busy: "#e0b76c",
-    support: "#f0f5f2", blind: "#c9d1cc", MOTION: "#c4ccc7", EMPTY: "#7fbb93", WARMUP: "#a2aca7",
+    tx: "#dee5e1", busy: "#e0b76c", blind: "#c9d1cc", MOTION: "#c4ccc7", EMPTY: "#7fbb93", WARMUP: "#a2aca7",
     UNCALIBRATED: "#e0b76c", NO_SIGNAL: "#7a837e", good: "#7fbb93", warn: "#e0b76c", fail: "#da767b",
     unknown: "#666e6a"
   };
@@ -1157,11 +1106,11 @@
     pause: $("pause"), demo: $("demo"), drawerToggle: $("drawer-toggle"), theme: $("theme"),
     msgbar: $("msgbar"), messages: $("messages"),
     mapCard: $("map-card"), mapBox: $("map-box"), map: $("map"), caption: $("map-caption"), busy: $("busy-note"),
-    track: $("track-note"), coverage: $("coverage-note"), heatPeak: $("heat-peak"),
+    coverage: $("coverage-note"), heatPeak: $("heat-peak"),
     counts: $("link-counts"), sortAttention: $("sort-attention"), sortName: $("sort-name"), links: $("links"),
     pucks: $("pucks"), pucksSummary: $("pucks-summary"), controls: $("controls"), drawerClose: $("drawer-close")
   };
-  var LAYER_INPUTS = { heat: "layer-heat", links: "layer-links", track: "track-show", coverage: "layer-coverage" };
+  var LAYER_INPUTS = { heat: "layer-heat", links: "layer-links", coverage: "layer-coverage" };
   var ctx = els.map.getContext("2d");
   var heatCanvas = document.createElement("canvas");
   var heatCtx = heatCanvas.getContext("2d");
@@ -1193,7 +1142,7 @@
   var puckOrder = null;
   var known = { room: null, nodes: [] };   // the last room and nodes, for a frame without them
   var coverage = { key: null };
-  var layers = { heat: true, links: true, track: true, coverage: false };
+  var layers = { heat: true, links: true, coverage: false };
   var demo = false;
   var drawerOpen = false;
   var sortMode = "attention";
@@ -1243,23 +1192,6 @@
     };
   }
   // ---- geometry: pure (tested with node) end
-
-  // ---- track: pure (tested with node) begin
-  // The 1-sigma ellipse of a track from its sx, sy (metres) and their correlation rho: semi-axes in metres and the
-  // rotation of the first (major) axis from +x. The map's y runs down like the room's, so the angle carries over.
-  function sigmaEllipse(sx, sy, rho) {
-    var a = sx * sx, d = sy * sy, b = (rho || 0) * sx * sy;
-    var mean = (a + d) / 2, half = Math.sqrt((a - d) * (a - d) / 4 + b * b);
-    var major = mean + half, minor = Math.max(0, mean - half);
-    return { rx: Math.sqrt(major), ry: Math.sqrt(minor), angle: Math.atan2(major - a, b) };
-  }
-  // the payload's track, or null when there is none to draw (an old log has no track key; null means no track)
-  function usableTrack(tr) {
-    if (!tr || typeof tr !== "object") return null;
-    if (!Number.isFinite(tr.x) || !Number.isFinite(tr.y)) return null;
-    return tr;
-  }
-  // ---- track: pure (tested with node) end
 
   // ---- coverage: pure (tested with node) begin
   // Blind spots for placing pucks, by the rule of scripts/plan_layout.py: a link covers a cell when the cell's
@@ -1405,13 +1337,10 @@
     var state = room && typeof room.state === "string" ? room.state : null;
     var raised = room && Array.isArray(room.elevated) ? room.elevated.length : 0;
     if (state === "MOTION") {
-      var sp = room.room_support;
+      // the reason in words only; where the agreeing links cross (status.room.room_support) is not shown
       var detail = room.reason === "strong" ? "one link strongly raised"
         : room.reason === "hold" ? "holding: movement just stopped"
         : plural(raised, "link") + (raised === 1 ? " raised" : " agree");
-      if (sp && Number.isFinite(sp.x) && Number.isFinite(sp.y) && room.reason !== "hold") {
-        detail += " near (" + sp.x.toFixed(2) + ", " + sp.y.toFixed(2) + ") m";
-      }
       return { key: "motion", label: "MOTION", detail: detail + partial };
     }
     if (state === "EMPTY") {
@@ -1915,97 +1844,6 @@
     });
   }
 
-  // the point the agreeing links pass near (status.room.room_support), while the room is in MOTION
-  function drawSupport(rs, g) {
-    var sp = rs ? rs.room_support : null;
-    if (!sp || !Number.isFinite(sp.x) || !Number.isFinite(sp.y)) return;
-    var k = mapScale(), x = g.X(sp.x), y = g.Y(sp.y), a = 10 * k, gap = 4 * k;
-    ctx.save();
-    // a spot reticle, as a thermal camera marks its measuring point: a dark casing, then the lit marks
-    [[PAL.floor, 3.5 * k, 0.7], [PAL.support, 1.5 * k, 1]].forEach(function (pass) {
-      ctx.strokeStyle = pass[0];
-      ctx.lineWidth = pass[1];
-      ctx.globalAlpha = pass[2];
-      ctx.beginPath();
-      ctx.moveTo(x - a, y); ctx.lineTo(x - gap, y); ctx.moveTo(x + gap, y); ctx.lineTo(x + a, y);
-      ctx.moveTo(x, y - a); ctx.lineTo(x, y - gap); ctx.moveTo(x, y + gap); ctx.lineTo(x, y + a);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(x, y, 5 * k, 0, 2 * Math.PI);
-      ctx.stroke();
-    });
-    ctx.restore();
-    labelBlock([{ text: "links agree here", font: smallFont, colour: PAL.support }], x + 10 * k, y + 8 * k,
-      "left", "top");
-  }
-
-  // The person track: the trail as a polyline that fades with age, then the estimate with its 1-sigma ellipse
-  // (dashed while coasting), or a 'last seen' marker with its growing uncertainty and how long ago.
-  function drawTrack(tr, g, now) {
-    if (!tr) return;
-    var X = g.X, Y = g.Y, k = mapScale();
-    var trail = Array.isArray(tr.trail) ? tr.trail : [];
-    ctx.save();
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = tr.active ? PAL.track : PAL.lost;
-    ctx.lineWidth = 3 * k;
-    for (var i = 1; i < trail.length; i++) {
-      var a = trail[i - 1], b = trail[i];
-      ctx.globalAlpha = 0.1 + 0.75 * clamp(1 - (now - b[0]) / TRAIL_FADE_S, 0, 1);
-      ctx.beginPath();
-      ctx.moveTo(X(a[1]), Y(a[2]));
-      ctx.lineTo(X(b[1]), Y(b[2]));
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-    var e = sigmaEllipse(tr.sx || 0, tr.sy || 0, tr.rho || 0);
-    var x = X(tr.x), y = Y(tr.y);
-    var rx = Math.max(3, e.rx * g.s), ry = Math.max(3, e.ry * g.s);
-    if (tr.active) {
-      ctx.fillStyle = PAL.trackFill;
-      ctx.beginPath();
-      ctx.ellipse(x, y, rx, ry, e.angle, 0, 2 * Math.PI);
-      ctx.fill();
-      if ((tr.last_seen_s || 0) > COASTING_S) ctx.setLineDash([7, 5]);
-      ctx.strokeStyle = PAL.floor;          // a dark casing under the lit ring, for the brightest heat
-      ctx.globalAlpha = 0.6;
-      ctx.lineWidth = 4 * k;
-      ctx.stroke();
-      ctx.strokeStyle = PAL.track;
-      ctx.globalAlpha = 1;
-      ctx.lineWidth = 2 * k;
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = PAL.track;
-      ctx.strokeStyle = PAL.floor;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(x, y, 7 * k, 0, 2 * Math.PI);
-      ctx.fill();
-      ctx.stroke();
-    } else {
-      var c = 7 * k;
-      ctx.strokeStyle = PAL.lost;
-      ctx.lineWidth = 2 * k;
-      ctx.setLineDash([5, 5]);
-      ctx.beginPath();
-      ctx.ellipse(x, y, rx, ry, e.angle, 0, 2 * Math.PI);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.lineWidth = 3 * k;
-      ctx.beginPath();
-      ctx.moveTo(x - c, y - c); ctx.lineTo(x + c, y + c);
-      ctx.moveTo(x + c, y - c); ctx.lineTo(x - c, y + c);
-      ctx.stroke();
-    }
-    ctx.restore();
-    if (!tr.active) {
-      labelBlock([{ text: "last seen " + ago(tr.last_seen_s), font: labelFont }], x + 12 * k, y - 12 * k, "left",
-        "bottom", PAL.lost);
-    }
-  }
-
   // a puck's role glyph: a receiver is a square, a sender a dot with broadcast arcs
   function drawGlyph(role, x, y, r) {
     if (role === "receiver") {
@@ -2129,11 +1967,7 @@
     drawGrid(room, g, step);
     drawRoomFrame(room, g, step);
 
-    if (layers.links) {
-      drawLinks(p, at, g, focus);
-      drawSupport(p.status.room, g);
-    }
-    if (layers.track) drawTrack(usableTrack(p.track), g, p.status.time_s);
+    if (layers.links) drawLinks(p, at, g, focus);
     drawPucks(p, frame, g, focus);
   }
 
@@ -2156,28 +1990,6 @@
   }
 
   function redraw() { if (shown) drawMap(shown); else drawWaiting(); }
-
-  // the track in words, under the map; nothing for an old log, when there is no track or the layer is off
-  function renderTrack(p) {
-    var tr = usableTrack(p.track);
-    var on = layers.track;
-    els.track.hidden = !tr || !on;
-    setClass(els.track, "note track-note" + (tr && !tr.active ? " lost" : ""));
-    if (!tr || !on) { setText(els.track, ""); return; }
-    var where = "(" + fmt(tr.x, 2) + ", " + fmt(tr.y, 2) + ") m";
-    var sigma = Math.max(tr.sx || 0, tr.sy || 0);
-    if (!tr.active) {
-      setText(els.track, "Last seen " + ago(tr.last_seen_s) + " at " + where + ", within about " +
-        fmt(sigma, 1) + " m. The person may have stopped moving: still people fade from the map.");
-    } else if ((tr.last_seen_s || 0) > COASTING_S) {
-      setText(els.track, "Person track coasting near " + where + ": last measured " +
-        fmt(tr.last_seen_s, 1) + " s ago.");
-    } else {
-      setText(els.track, "Person track at " + where + " \u00b1 " + fmt(sigma, 2) + " m, moving " +
-        fmt(Math.sqrt((tr.vx || 0) * (tr.vx || 0) + (tr.vy || 0) * (tr.vy || 0)), 1) + " m/s, followed for " +
-        duration(tr.age_s) + ".");
-    }
-  }
 
   // the near-node veto in words, under the map; old logs have no busy_nodes and show nothing
   function renderBusy(p) {
@@ -2960,7 +2772,6 @@
     drawMap(p);
     renderRoom(p);
     renderBusy(p);
-    renderTrack(p);
     renderCoverage(p);
     renderLinks(p);
     renderPucks(p);

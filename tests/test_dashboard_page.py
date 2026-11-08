@@ -5,7 +5,6 @@ one response from a running server.
 """
 import copy
 import json
-import math
 import re
 import shutil
 import subprocess
@@ -22,9 +21,10 @@ from csi.server import DashboardServer
 from csi.simulate import simulate_room
 
 PAGE = Path(__file__).resolve().parents[1] / "web" / "index.html"
-# Updated in the impl2 integration: the page now draws the one-person track (csi/tracker.py) over the map, so the
+# Updated in the impl2 integration: the page drew the one-person track (csi/tracker.py) over the map, so the
 # caption no longer says "not a position track"; it names the estimator that drew the heatmap instead (the
-# four-link rig's default under --estimator auto is the back-projection).
+# four-link rig's default under --estimator auto is the back-projection). The team has since removed the person
+# indicators from the page (see the tests further down); the caption is unchanged.
 CAPTION = "Rough motion-likelihood estimate from 4 links (back-projection)."
 ROOM = load_room()
 
@@ -335,7 +335,6 @@ let stream = null;
 function FakeEventSource() { this.close = noop; stream = this; }
 const errors = [];
 const busyHidden = [];
-const trackHidden = [];
 try {
   // no /api/state: the page goes straight to the event stream, which this stub drives payload by payload
   new Function("window", "document", "fetch", "EventSource", "setTimeout", "clearTimeout", script)(
@@ -349,9 +348,8 @@ try {
       stream.onmessage({ data: JSON.stringify(payload) });   // render errors surface here, not in a promise
     } catch (err) { errors.push(String((err && err.stack) || err)); }
     busyHidden.push(elements["busy-note"] ? elements["busy-note"].hidden : null);
-    trackHidden.push(elements["track-note"] ? elements["track-note"].hidden : null);
   }
-  console.log(JSON.stringify({ calls: mapLog, texts, errors, busyHidden, trackHidden }));
+  console.log(JSON.stringify({ calls: mapLog, texts, errors, busyHidden }));
 })();
 """
 
@@ -396,66 +394,48 @@ def test_page_shows_link_health_last_motion_and_activity_near_a_node_and_still_r
     assert result["busyHidden"] == [False, True]                      # the old payload has no busy node
 
 
-# ---------------------------------------------------------------- the person track (payload.track, csi/tracker.py)
+# ---------------------------------------------------------------- no person indicators (payload.track, room_support)
+# The team removed the person indicators from the page: they were not accurate enough, and the heat map stays. Gone
+# are the track (its dot, 1-sigma ellipse, trail and 'last seen' marker), its layer toggle, legend and note under
+# the map, the "links agree here" reticle and the coordinates in the room reason. The sigma-ellipse test went with
+# the ellipse. The server still sends 'track' and 'room_support'; the page ignores them.
 
 TRACK_BEGIN = "// ---- track: pure (tested with node) begin"
-TRACK_END = "// ---- track: pure (tested with node) end"
 NOW = 1_700_000_000.0
 ACTIVE_TRACK = {"active": True, "x": 1.2, "y": 0.8, "sx": 0.3, "sy": 0.2, "rho": 0.4, "vx": 0.5, "vy": -0.1,
                 "age_s": 8.0, "last_seen_s": 0.0,
                 "trail": [[NOW - 2.0, 0.6, 0.9], [NOW - 1.0, 0.9, 0.85], [NOW, 1.2, 0.8]]}
 
 
-def test_page_draws_the_track_over_the_heatmap_with_a_toggle_and_tolerates_no_track():
+def test_page_has_no_person_indicators_and_keeps_the_heatmap():
     html = PAGE.read_text(encoding="utf-8")
-    assert TRACK_BEGIN in html and TRACK_END in html
-    assert "usableTrack(p.track)" in html                 # a missing or null track draws nothing
-    assert re.search(r'<input[^>]*id="track-show"[^>]*checked', html)   # shown by default, can be hidden
     assert "drawHeat(p.heatmap, g)" in html               # the heatmap stays
-    assert "last seen" in html and "ctx.ellipse(" in html
+    # the team removed person indicators: no track code, toggle, note, legend, ellipse or reticle on the page
+    for gone in (TRACK_BEGIN, "usableTrack", "drawTrack", "renderTrack", "drawSupport", 'id="track-show"',
+                 'id="track-note"', "Person track", "last seen", "ctx.ellipse(", "links agree here"):
+        assert gone not in html, gone
 
 
 @pytest.mark.slow
 @needs_node
-def test_sigma_ellipse_axes_and_rotation_follow_the_covariance(tmp_path):
-    html = PAGE.read_text(encoding="utf-8")
-    block = html[html.index(TRACK_BEGIN):html.index(TRACK_END)]
-    script = tmp_path / "ellipse_harness.js"
-    script.write_text(block + """
-var cases = JSON.parse(require("fs").readFileSync(0, "utf8"));
-console.log(JSON.stringify(cases.map(function (c) { return sigmaEllipse(c[0], c[1], c[2]); })));
-""", encoding="utf-8")
-    cases = [[0.3, 0.1, 0.0], [0.1, 0.3, 0.0], [0.2, 0.2, 0.9], [0.2, 0.2, -0.9]]
-    proc = subprocess.run(["node", str(script)], input=json.dumps(cases), capture_output=True, text=True, timeout=30)
-    assert proc.returncode == 0, proc.stderr
-    wide, tall, down_right, up_right = json.loads(proc.stdout)
-    assert (wide["rx"], wide["ry"], wide["angle"]) == (pytest.approx(0.3), pytest.approx(0.1), pytest.approx(0.0))
-    assert tall["rx"] == pytest.approx(0.3) and tall["angle"] == pytest.approx(math.pi / 2)
-    # y runs down on the map as in the room: positive correlation leans the ellipse down to the right
-    assert down_right["angle"] == pytest.approx(math.pi / 4) and down_right["rx"] > down_right["ry"]
-    assert up_right["angle"] == pytest.approx(3 * math.pi / 4)
-
-
-@pytest.mark.slow
-@needs_node
-def test_page_draws_a_track_a_coasting_track_and_a_last_seen_marker_and_still_renders_without_one(tmp_path):
+def test_page_draws_no_track_whatever_the_payload_carries_and_still_draws_the_heat(tmp_path):
     base = DashboardState(load_room(FIVE)).snapshot(now=NOW)
-    assert "track" in base and base["track"] is None      # no track until one is confirmed
+    assert "track" in base and base["track"] is None      # the server still sends the key
     active = {**copy.deepcopy(base), "track": dict(ACTIVE_TRACK)}
     coasting = {**copy.deepcopy(base), "track": {**ACTIVE_TRACK, "last_seen_s": 1.5}}
     lost = {**copy.deepcopy(base), "track": {**ACTIVE_TRACK, "active": False, "vx": 0.0, "vy": 0.0,
                                              "last_seen_s": 12.4}}
     old = copy.deepcopy(base)
     del old["track"]                                       # a log written before the tracker
-    result = render_payloads_with_stub(tmp_path, [active, coasting, lost, old, copy.deepcopy(base)])
-    assert result["errors"] == []
+    payloads = [active, coasting, lost, old, copy.deepcopy(base)]
+    result = render_payloads_with_stub(tmp_path, payloads)
+    assert result["errors"] == []                          # every payload renders, with or without a track
     calls, texts = result["calls"], result["texts"]
-    assert sum(c[0] == "ellipse" for c in calls) == 3      # one 1-sigma ellipse per drawn track
-    assert any(c[0] == "fillText" and c[1] == "last seen 12 s ago" for c in calls)
-    assert any(t.startswith("Person track at (1.20, 0.80) m") for t in texts)
-    assert any(t.startswith("Person track coasting near (1.20, 0.80) m") for t in texts)
-    assert any(t.startswith("Last seen 12 s ago at (1.20, 0.80) m") for t in texts)
-    assert result["trackHidden"] == [False, False, False, True, True]
+    # the team removed person indicators: no ellipse, marker, label or words for the track, whatever it says
+    assert not any(c[0] == "ellipse" for c in calls)
+    assert not any(c[0] == "fillText" and "last seen" in str(c[1]) for c in calls)
+    assert not any(t.startswith(("Person track", "Last seen")) or "(1.20, 0.80)" in t for t in texts)
+    assert sum(c[0] == "drawImage" for c in calls) == len(payloads)   # the heat, once per frame
 
 
 # ---------------------------------------------------------------- the estimator in the caption (heatmap.estimator)
@@ -626,7 +606,7 @@ def test_room_pill_reads_the_room_decision_and_falls_back_to_the_link_states_for
         frame([]),
     ]
     assert run_block(tmp_path, ROOM_STATE_BEGIN, ROOM_STATE_END, ROOM_STATE_TAIL, cases) == [
-        ["MOTION", "2 links agree near (1.40, 0.90) m"],
+        ["MOTION", "2 links agree"],          # the team removed person indicators: no room_support coordinates
         ["MOTION", "one link strongly raised; 3 of 4 links heard"],
         ["CLEAR", "1 raised, 2 needed"],
         ["CLEAR", "no link raised"],
@@ -641,7 +621,7 @@ def test_room_pill_reads_the_room_decision_and_falls_back_to_the_link_states_for
 
 @pytest.mark.slow
 @needs_node
-def test_page_shows_the_room_state_with_its_reason_the_agreement_point_and_what_needs_fixing(tmp_path):
+def test_page_shows_the_room_state_with_its_reason_and_what_needs_fixing_but_no_agreement_point(tmp_path):
     base = DashboardState(load_room(FIVE)).snapshot(now=NOW)          # nothing heard yet
     motion = copy.deepcopy(base)
     for row in motion["links"]:
@@ -655,8 +635,10 @@ def test_page_shows_the_room_state_with_its_reason_the_agreement_point_and_what_
     texts, drawn = result["texts"], [c[1] for c in result["calls"] if c[0] == "fillText"]
     assert "NO DATA" in texts and "no packets from any link" in texts
     assert "no packets" in drawn                                        # a puck none of whose links is heard
-    assert "2 links agree near (1.40, 0.90) m" in texts
-    assert "links agree here" in drawn                                  # the point the agreeing links pass near
+    assert "2 links agree" in texts                                     # the reason, in words only
+    # the team removed person indicators: no coordinates in the reason and no reticle where the links cross
+    assert not any("near (" in t for t in texts)
+    assert "links agree here" not in drawn
     assert "Check: weak signal" in texts                                # the -78 dBm link says what to fix
 
 
