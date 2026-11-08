@@ -117,7 +117,10 @@ def test_page_talks_to_the_command_endpoints_and_shows_the_countdown_text():
     assert "unreliable" in html or "warning" in html     # warnings are highlighted
 
 
-# ---------------------------------------------------------------- the map draws nodes outside the room
+# ---------------------------------------------------------------- the map frames every node, in the room or not
+# Updated when the team removed the outside-room marks (the demo pucks sit inside the room): a node beyond the room
+# rectangle, like rx3 in the star fixture, is still framed and labelled, but gets no "outside room" line and no
+# dashed leader to the nearest room edge, so the page has no isOutsideRoom / leaderEnd helpers any more.
 
 STAR = Path(__file__).resolve().parent / "fixtures" / "room_star.json"
 GEOMETRY_BEGIN = "// ---- geometry: pure (tested with node) begin"
@@ -129,7 +132,7 @@ var room = input.room, nodes = input.nodes, bounds = mapBounds(room, nodes);
 console.log(JSON.stringify({
   bounds: bounds,
   nodes: nodes.map(function (n) {
-    return { name: n.name, outside: isOutsideRoom(n, room), leader: leaderEnd(n, room), side: labelSide(n, bounds) };
+    return { name: n.name, side: labelSide(n, bounds) };
   })
 }));
 """
@@ -242,15 +245,15 @@ def test_page_draws_rx3_above_the_room_outline_and_heat_exactly_over_the_room_re
     pucks = [c for c in calls if c[0] == "arc" and c[3] == PUCK_R]
     above = [c for c in pucks if c[2] < room_top and c[2] - PUCK_R >= 0]
     assert len(pucks) == 5 and len(above) == 1
-    assert any(c[0] == "fillText" and c[1] == "outside room" for c in calls)
+    assert not any(c[0] == "fillText" and c[1] == "outside room" for c in calls)   # the outside-room marks are gone
 
 
 def test_page_has_marked_pure_geometry_block_and_the_map_draws_from_it():
     html = PAGE.read_text(encoding="utf-8")
     assert GEOMETRY_BEGIN in html and GEOMETRY_END in html
     assert "mapBounds(room, p.nodes)" in html            # the map frame includes every node
-    assert "outside room" in html                         # nodes beyond the rectangle say so on the map
-    assert "leaderEnd(" in html                           # and get a dashed leader to the nearest room edge
+    assert "outside room" not in html                     # no "outside room" label on the map or in the pucks list
+    assert "leaderEnd(" not in html and "isOutsideRoom(" not in html   # and no dashed leader to the room edge
 
 
 @pytest.mark.slow
@@ -274,15 +277,11 @@ def test_map_bounds_without_an_outside_node_are_just_the_room_plus_margin(tmp_pa
 
 @pytest.mark.slow
 @needs_node
-def test_rx3_is_outside_the_room_with_a_leader_to_the_top_wall_and_labels_point_into_the_bounds(tmp_path):
+def test_labels_point_into_the_bounds_for_every_node_rx3_beyond_the_top_wall_too(tmp_path):
     payload = star_payload()
     by_name = {n["name"]: n for n in run_geometry(tmp_path, payload["room"], payload["nodes"])["nodes"]}
-    rx3 = by_name["rx3"]
-    assert rx3["outside"] is True
-    assert rx3["leader"] == {"x": pytest.approx(1.385), "y": pytest.approx(0.0)}
-    assert rx3["side"]["dy"] > 0                 # rx3 is at the top of the bounds: its label goes below it
-    for name in ("rx1", "rx2", "tx0", "tx1"):
-        assert by_name[name]["outside"] is False, name
+    assert set(by_name) == {"rx1", "rx2", "rx3", "tx0", "tx1"}
+    assert by_name["rx3"]["side"]["dy"] > 0      # rx3 is at the top of the bounds: its label goes below it
     assert by_name["tx1"]["side"]["dy"] < 0 and by_name["tx1"]["side"]["dx"] > 0   # bottom-left: up and right
     assert by_name["rx2"]["side"]["dx"] > 0 and by_name["rx2"]["side"]["dy"] > 0   # top-left: right and down
 

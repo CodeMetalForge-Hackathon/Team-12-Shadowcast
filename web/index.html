@@ -1204,13 +1204,6 @@
     });
     return { x0: x0 - MAP_MARGIN_M, y0: y0 - MAP_MARGIN_M, x1: x1 + MAP_MARGIN_M, y1: y1 + MAP_MARGIN_M };
   }
-  function isOutsideRoom(n, room) {
-    return n.x < 0 || n.y < 0 || n.x > room.width_m || n.y > room.depth_m;
-  }
-  // the room point nearest a node: where a node outside the room gets its dashed leader
-  function leaderEnd(n, room) {
-    return { x: Math.min(room.width_m, Math.max(0, n.x)), y: Math.min(room.depth_m, Math.max(0, n.y)) };
-  }
   // a node's label goes toward the middle of the frame, so it stays on the canvas
   function labelSide(n, b) {
     var cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
@@ -1900,33 +1893,20 @@
     });
   }
 
-  // Pucks: a round marker with its role glyph and a ring for the health of its links. A puck outside the room
-  // (rx3 beyond the top wall) gets a dashed leader to the nearest room edge and an "outside room" line in its
-  // label. A puck with movement right next to it (heatmap.busy_nodes, the near-node veto) or whose links the room
-  // decision set aside (status.room.glitch_nodes) gets an amber halo and a callout.
+  // Pucks: a round marker with its role glyph and a ring for the health of its links, drawn where the config puts
+  // them, inside the room or not, with nothing extra either way. A puck with movement right next to it
+  // (heatmap.busy_nodes, the near-node veto) or whose links the room decision set aside (status.room.glitch_nodes)
+  // gets an amber halo and a callout.
   function drawPucks(p, frame, g, focus) {
-    var room = p.room, k = mapScale(), r = PUCK_R * k;
+    var k = mapScale(), r = PUCK_R * k;
     var busy = nameSet(p.heatmap && p.heatmap.busy_nodes);
     var glitch = nameSet(p.status.room && p.status.room.glitch_nodes);
     var ports = p.status.receivers || {};
     p.nodes.forEach(function (n) {
       if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) return;
       var x = g.X(n.x), y = g.Y(n.y);
-      var outside = isOutsideRoom(n, room);
       var health = puckHealth(n.name, p.links, ports[n.name]);
       var callout = busy[n.name] || glitch[n.name];
-      if (outside) {
-        var edge = leaderEnd(n, room);
-        ctx.save();
-        ctx.strokeStyle = PAL.tick;
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(g.X(edge.x), g.Y(edge.y));
-        ctx.stroke();
-        ctx.restore();
-      }
       ctx.save();
       if (focus && !focus.nodes[n.name]) ctx.globalAlpha = 0.45;
       if (callout) {
@@ -1962,7 +1942,6 @@
       hits.push({ kind: "puck", id: n.name, x: x, y: y, r: r + 6 });
       var side = labelSide(n, frame), off = r + 8 * k;
       var lines = [{ text: n.name, font: labelFont }];
-      if (outside) lines.push({ text: "outside room", font: smallFont, colour: PAL.muted });   // a fact, not a fault
       if (busy[n.name]) lines.push({ text: "activity near " + n.name, font: smallFont, colour: PAL.busy });
       else if (glitch[n.name]) lines.push({ text: "links set aside", font: smallFont, colour: PAL.busy });
       if (health.level === "fail") {
@@ -2517,7 +2496,6 @@
       setClass(r.glyph, "pglyph" + (n.role === "receiver" ? "" : " tx"));
       setText(r.role, [n.role, n.chip].filter(Boolean).join(", "));
       var notes = ["(" + fmt(n.x, 2) + ", " + fmt(n.y, 2) + ") m"];
-      if (p.room && isOutsideRoom(n, p.room)) notes.push("outside room");
       if (busy[n.name]) notes.push("activity near");
       else if (glitch[n.name]) notes.push("links set aside");
       if (ports[n.name] === "failed") notes.push("port failed");

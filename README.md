@@ -164,8 +164,7 @@ How the code treats the layout:
   dashboard payload, and its serial port is never opened. Its port can even be missing, so a node
   can be defined before its board is plugged in.
 - **Positions.** A node may sit outside the room rectangle. The map frames the room and every node,
-  and a node outside the room gets a dashed leader and an "outside room" label. The heatmap covers
-  the room only.
+  each drawn where the config puts it. The heatmap covers the room only.
 - **Link weights** are keyed by link label, for example `"rx1<-01": 0.3`.
 - **Heatmap estimator.** With the default `--estimator auto`, the heatmap switches from the back-projection
   to RTI once at least 6 links report (enable `rx3`, or add a third sender). RTI places a person better
@@ -574,7 +573,7 @@ A real port started without `--thresholds` still runs, but its links show
 What the page shows (`web/index.html`, one static file with no network assets):
 
 - **Room.** The nodes at their configured positions (receivers and senders drawn
-  differently; a node outside the room is drawn with a dashed leader), the links coloured by state, and
+  differently), the links coloured by state, and
   the heatmap. The caption under the map says how many links drew it and with which estimator
   (back-projection or RTI). A node with movement right next to it gets a ring, an "activity near" label
   and a note under the map (see [Reading the heatmap](#reading-the-heatmap)).
